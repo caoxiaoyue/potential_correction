@@ -320,7 +320,6 @@ class SparseDpsiGrid(object):
             sparse_box_corners_x = [self.xgrid_dpsi[i,j], self.xgrid_dpsi[i,j+1], self.xgrid_dpsi[i+1,j], self.xgrid_dpsi[i+1,j+1]] 
             sparse_box_corners_y = [self.ygrid_dpsi[i,j], self.ygrid_dpsi[i,j+1], self.ygrid_dpsi[i+1,j], self.ygrid_dpsi[i+1,j+1]]
             weight_sparse_box_corners = linear_weight_from_box(sparse_box_corners_x, sparse_box_corners_y, position=(this_y_data, this_x_data))
-            weight_sparse_box_corners = np.array(weight_sparse_box_corners)
 
             indices_tmp = [j+self.shape_2d_dpsi[0]*i, j+1+self.shape_2d_dpsi[0]*i, j+self.shape_2d_dpsi[0]*(i+1), j+1+self.shape_2d_dpsi[0]*(i+1)]
             indices_of_indices_1d_dpsi = [np.where(self.indices_1d_dpsi == item)[0][0] for item in indices_tmp]
