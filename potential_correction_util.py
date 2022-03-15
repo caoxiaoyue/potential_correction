@@ -1,6 +1,7 @@
 import autolens as al
 import numpy as np
 from scipy.interpolate import griddata #, CloughTocher2DInterpolator
+import grid_util
 
 def source_gradient_from(source_points, source_values, eval_points, cross_size=1e-3):
     """
@@ -70,6 +71,22 @@ def source_gradient_matrix_from(source_gradient):
     return source_gradient_matrix
 
 
+def dpsi_gradient_operator_from(Hx_dpsi, Hy_dpsi):
+    """
+    Accept the x/y differential operator Hx_dpsi and Hy_dps; both shapes are [n_unmased_dpsi_points, n_unmased_dpsi_points]
+    Construct the dpsi_gradient_operator with shape [2*n_unmased_dpsi_points, n_unmased_dpsi_points]. 
+    see eq-8 in our potential correction document
+    """
+    n_unmased_dpsi_points = len(Hx_dpsi)
+    dpsi_gradient_operator = np.zeros((2*n_unmased_dpsi_points, n_unmased_dpsi_points))
+
+    for count in range(n_unmased_dpsi_points):
+        dpsi_gradient_operator[count*2, :] = Hx_dpsi[count, :]
+        dpsi_gradient_operator[count*2+1, :] = Hy_dpsi[count, :]
+
+    return dpsi_gradient_operator
+
+
 #4th order regularization matrix-------------
 def Hx_4th(grid_shape):
     n1, n2 = grid_shape
@@ -111,3 +128,17 @@ def order_4th_reg_matrix(grid_shape):
     Hx = Hx_4th(grid_shape)
     Hy = Hy_4th(grid_shape)
     return np.matmul(Hx.T, Hx) + np.matmul(Hy.T, Hy)
+
+
+if __name__ == '__main__':
+    #An dpsi_gradient_operator test
+    grid_data = al.Grid2D.uniform(shape_native=(10,10), pixel_scales=0.1, sub_size=1)
+    xgrid_data = grid_data.native[:,:,1]
+    ygrid_data = grid_data.native[:,:,0]
+    rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
+    mask = rgrid>0.25
+    grid_obj = grid_util.SparseDpsiGrid(mask, 0.1, shape_2d_dpsi=(5,5))
+    grid_obj.show_grid()
+
+    dpsi_gradient_matrix = dpsi_gradient_operator_from(grid_obj.Hx_dpsi, grid_obj.Hy_dpsi)
+    np.savetxt('test/data/dpsi_gradient_matrix.txt', dpsi_gradient_matrix, fmt='%.2f')

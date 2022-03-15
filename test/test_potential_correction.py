@@ -38,3 +38,16 @@ def test_source_gradient_matrix():
     ])
 
     assert np.isclose(source_gradient_matrix, source_gradient_matrix_true, rtol=1e-05, atol=1e-08, equal_nan=False).all()
+
+
+def test_dpsi_gradient_operator_matrix():
+    grid_data = al.Grid2D.uniform(shape_native=(10,10), pixel_scales=0.1, sub_size=1)
+    xgrid_data = grid_data.native[:,:,1]
+    ygrid_data = grid_data.native[:,:,0]
+    rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
+    mask = rgrid>0.25
+    grid_obj = grid_util.SparseDpsiGrid(mask, 0.1, shape_2d_dpsi=(5,5))
+
+    dpsi_gradient_matrix = pcu.dpsi_gradient_operator_from(grid_obj.Hx_dpsi, grid_obj.Hy_dpsi)
+    dpsi_gradient_matrix_true = np.loadtxt(f'{current_dir}/data/dpsi_gradient_matrix.txt')
+    assert np.isclose(dpsi_gradient_matrix, dpsi_gradient_matrix_true, rtol=1e-05, atol=1e-08, equal_nan=False).all()
