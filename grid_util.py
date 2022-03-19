@@ -200,6 +200,116 @@ def gradient_operator_from_mask(mask, dpix=0.05):
     return Hy, Hx
 
 
+def diff_4th_operator_from_mask(mask, dpix=0.05):
+    """
+    Receive a mask, use it to generate the 4th differtial operator matrix Hx_4th and Hy_4th.
+    """ 
+    unmask = ~mask
+    i_indices_unmasked, j_indices_unmasked = np.where(unmask)
+    indices_1d_unmasked = np.where(unmask.flatten())[0]
+    n_unmasked_pixels = len(i_indices_unmasked) 
+    Hx = np.zeros((n_unmasked_pixels, n_unmasked_pixels)) #x-direction gradient operator matrix
+    Hy = np.zeros((n_unmasked_pixels, n_unmasked_pixels)) #y-direction gradient operator matrix
+    step_y = -1.0*dpix #the minus sign is due to the y-coordinate decrease the pixel_size as index i along axis-0 increase 1.
+    step_x = 1.0*dpix #no minus, becasue the x-coordinate increase as index j along axis-1 increase.
+
+    for count in range(n_unmasked_pixels):
+        i, j = i_indices_unmasked[count], j_indices_unmasked[count]
+        #------check y-direction
+        #try 4th diff first
+        if unmask[i-2,j] and unmask[i-1,j] and unmask[i+1,j] and unmask[i+2,j]: #4th central diff
+            indices_tmp = np.ravel_multi_index([(i-2, i-1, i, i+1, i+2), (j, j, j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -4.0, 6.0, -4.0, 1.0])/step_y**4
+        elif unmask[i+1,j] and unmask[i+2,j] and unmask[i+3,j] and unmask[i+4,j]: #4th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i+1, i+2, i+3, i+4), (j, j, j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -4.0, 6.0, -4.0, 1.0])/step_y**4   
+        elif unmask[i-1,j] and unmask[i-2,j] and unmask[i-3,j] and unmask[i-4,j]: #4th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i-1, i-2, i-3, i-4), (j, j, j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -4.0, 6.0, -4.0, 1.0])/step_y**4
+        #if 4th diff fails, try 3th diff; Note, we don't need to try 3th central if 4th central fails
+        elif unmask[i+1,j] and unmask[i+2,j] and unmask[i+3,j]: #3th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i+1, i+2, i+3), (j, j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([-1.0, 3.0, -3.0, 1.0])/step_y**3   
+        elif unmask[i-1,j] and unmask[i-2,j] and unmask[i-3,j]: #3th backward diff
+            indices_tmp = np.ravel_multi_index([(i, i-1, i-2, i-3), (j, j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -3.0, 3.0, -1.0])/step_y**3        
+        #if 3th diff fails, try 2th diff;
+        elif unmask[i-1,j] and unmask[i+1,j]: #2th central diff
+            indices_tmp = np.ravel_multi_index([(i-1, i, i+1), (j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_y**2   
+        elif unmask[i+1,j] and unmask[i+2,j]: #2th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i+1, i+2), (j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_y**2   
+        elif unmask[i-1,j] and unmask[i-2,j]: #2th backward diff
+            indices_tmp = np.ravel_multi_index([(i, i-1, i-2), (j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_y**2  
+        #if 2th diff fails, try 1th diff; we don't need to try 1th central if 2th central fails
+        elif unmask[i+1,j]: #1th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i+1), (j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([-1.0, 1.0])/step_y   
+        elif unmask[i-1,j]: #1th backward diff
+            indices_tmp = np.ravel_multi_index([(i, i-1), (j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -1.0])/step_y  
+
+        #------check x-direction
+        #try 4th diff first
+        if unmask[i, j-2] and unmask[i, j-1] and unmask[i, j+1] and unmask[i, j+2]: #4th central diff
+            indices_tmp = np.ravel_multi_index([(i, i, i, i, i), (j-2, j-1, j, j+1, j+2)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -4.0, 6.0, -4.0, 1.0])/step_x**4
+        elif unmask[i, j+1] and unmask[i, j+2] and unmask[i, j+3] and unmask[i, j+4]: #4th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i, i, i, i), (j, j+1, j+2, j+3, j+4)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -4.0, 6.0, -4.0, 1.0])/step_x**4   
+        elif unmask[i, j-1] and unmask[i, j-2] and unmask[i, j-3] and unmask[i, j-4]: #4th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i, i, i, i), (j, j-1, j-2, j-3, j-4)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -4.0, 6.0, -4.0, 1.0])/step_x**4
+        #if 4th diff fails, try 3th diff; Note, we don't need to try 3th central if 4th central fails
+        elif unmask[i, j+1] and unmask[i, j+2] and unmask[i, j+3]: #3th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i, i, i), (j, j+1, j+2, j+3)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([-1.0, 3.0, -3.0, 1.0])/step_x**3   
+        elif unmask[i, j-1] and unmask[i, j-2] and unmask[i, j-3]: #3th backward diff
+            indices_tmp = np.ravel_multi_index([(i, i, i, i), (j, j-1, j-2, j-3)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -3.0, 3.0, -1.0])/step_x**3        
+        #if 3th diff fails, try 2th diff;
+        elif unmask[i, j-1] and unmask[i, j+1]: #2th central diff
+            indices_tmp = np.ravel_multi_index([(i, i, i), (j-1, j, j+1)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_x**2   
+        elif unmask[i, j+1] and unmask[i, j+2]: #2th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i, i), (j, j+1, j+2)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_x**2   
+        elif unmask[i, j-1] and unmask[i, j-2]: #2th backward diff
+            indices_tmp = np.ravel_multi_index([(i, i, i), (j, j-1, j-2)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_x**2  
+        #if 2th diff fails, try 1th diff; we don't need to try 1th central if 2th central fails
+        elif unmask[i, j+1]: #1th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i), (j, j+1)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([-1.0, 1.0])/step_x   
+        elif unmask[i, j-1]: #1th backward diff
+            indices_tmp = np.ravel_multi_index([(i, i), (j, j-1)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -1.0])/step_x  
+
+        return Hy, Hx
+
+
 class SparseDpsiGrid(object):
     def __init__(self, mask, dpix_data, shape_2d_dpsi=(30,30)):
         """
