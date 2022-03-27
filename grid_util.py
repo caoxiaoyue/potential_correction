@@ -307,7 +307,7 @@ def diff_4th_operator_from_mask(mask, dpix=0.05):
             indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
             Hx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -1.0])/step_x  
 
-        return Hy, Hx
+    return Hy, Hx
 
 
 class SparseDpsiGrid(object):
@@ -345,6 +345,7 @@ class SparseDpsiGrid(object):
         self.get_dpsi2data_mapping()
         self.get_gradient_operator_data()
         self.get_gradient_operator_dpsi()
+        self.get_diff_4th_operator_dpsi()
 
 
     def mask_dpsi_from_data(self):
@@ -460,6 +461,10 @@ class SparseDpsiGrid(object):
 
     def get_gradient_operator_dpsi(self):
         self.Hy_dpsi, self.Hx_dpsi = gradient_operator_from_mask(self.mask_dpsi, self.dpix_dpsi)
+
+
+    def get_diff_4th_operator_dpsi(self):
+        self.Hy_dpsi_4th, self.Hx_dpsi_4th = diff_4th_operator_from_mask(self.mask_dpsi, self.dpix_dpsi)
 
 
 
@@ -636,7 +641,7 @@ if __name__ == '__main__':
     assert np.isclose(x_gradient, 2, rtol=1e-05, atol=1e-08, equal_nan=False).all()
     """
 
-
+    """
     #test gradient operator matrix Hx Hy in SparseDpsiGrid class
     grid_data = al.Grid2D.uniform(shape_native=(100,100), pixel_scales=0.1, sub_size=1)
     xgrid_data = grid_data.native[:,:,1]
@@ -660,8 +665,42 @@ if __name__ == '__main__':
     assert np.isclose(x_gradient_data, 2, rtol=1e-05, atol=1e-08, equal_nan=False).all()
     assert np.isclose(y_gradient_dpsi, 3, rtol=1e-05, atol=1e-08, equal_nan=False).all()
     assert np.isclose(x_gradient_dpsi, 2, rtol=1e-05, atol=1e-08, equal_nan=False).all()
+    """
     
 
+    #test 4th diff operator matrix Hx Hy in SparseDpsiGrid class
+    grid_data = al.Grid2D.uniform(shape_native=(20,20), pixel_scales=1.0, sub_size=1)
+    xgrid_data = grid_data.native[:,:,1]
+    ygrid_data = grid_data.native[:,:,0]
+    rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
+    annular_mask = (rgrid>5.0) #np.logical_or(rgrid<1.0, rgrid>4.0)
+    grid_obj = SparseDpsiGrid(annular_mask, 1.0, shape_2d_dpsi=(10,10))
+    grid_obj.show_grid()
+
+    def test_func(xgrid, ygrid):
+        return xgrid**4 + 2*ygrid**4 + 1
+
+    dpsi_image1d_true = test_func(grid_obj.xgrid_dpsi_1d, grid_obj.ygrid_dpsi_1d)
+    y_diff_4th_dpsi_1d = np.matmul(grid_obj.Hy_dpsi_4th, dpsi_image1d_true)
+    x_diff_4th_dpsi_1d = np.matmul(grid_obj.Hx_dpsi_4th, dpsi_image1d_true)
+
+    y_diff_4th_dpsi_2d = np.zeros_like(grid_obj.xgrid_dpsi)
+    y_diff_4th_dpsi_2d[~grid_obj.mask_dpsi] = y_diff_4th_dpsi_1d
+
+    x_diff_4th_dpsi_2d = np.zeros_like(grid_obj.xgrid_dpsi)
+    x_diff_4th_dpsi_2d[~grid_obj.mask_dpsi] = x_diff_4th_dpsi_1d
+
+    np.savetxt('test/data/Hy_dpsi_4th.txt', grid_obj.Hy_dpsi_4th, fmt='%.6f')
+    np.savetxt('test/data/Hx_dpsi_4th.txt', grid_obj.Hx_dpsi_4th, fmt='%.6f')
 
 
+    plt.figure(figsize=(10,10))
+    plt.subplot(221)
+    plt.imshow(y_diff_4th_dpsi_2d, extent=grid_obj.image_bound)
+    plt.colorbar(fraction=0.046, pad=0.04)
+    plt.subplot(222)
+    plt.imshow(x_diff_4th_dpsi_2d, extent=grid_obj.image_bound)
+    plt.colorbar(fraction=0.046, pad=0.04)
+    plt.savefig('diff_4th_image.png')
+    plt.close()
     

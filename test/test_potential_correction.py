@@ -17,11 +17,11 @@ def test_source_gradient():
     def src_func(x, y):
         return 2*x**2 + 3*y**2 + 2
 
-    eval_points = np.array([(0.0, 0.0), (0.0, 0.5), (0.5, 0.0), (0.5, 0.5)])
+    eval_points = np.array([(0.0, 0.0), (0.0, 0.5), (0.5, 0.0), (0.5, 0.5)]) #[[y1,x1], [y2,x2],...]
     source_values = src_func(dpis_points_source_plane[:,1], dpis_points_source_plane[:,0])
     source_gradient = pcu.source_gradient_from(dpis_points_source_plane, source_values, eval_points, cross_size=1e-3)
     
-    source_gradient_true = np.array([(0.0, 0.0), (0.0, 2.0), (3.0, 0.0), (3.0, 2.0)])
+    source_gradient_true = np.array([(0.0, 0.0), (0.0, 2.0), (3.0, 0.0), (3.0, 2.0)]) #(y,x) directional derivatie at [[y1,x1], [y2,x2],...]
     assert np.isclose(source_gradient, source_gradient_true, rtol=1e-05, atol=1e-08, equal_nan=False).all()
 
 
