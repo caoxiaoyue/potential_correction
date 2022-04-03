@@ -51,3 +51,92 @@ def test_dpsi_gradient_operator_matrix():
     dpsi_gradient_matrix = pcu.dpsi_gradient_operator_from(grid_obj.Hx_dpsi, grid_obj.Hy_dpsi)
     dpsi_gradient_matrix_true = np.loadtxt(f'{current_dir}/data/dpsi_gradient_matrix.txt')
     assert np.isclose(dpsi_gradient_matrix, dpsi_gradient_matrix_true, rtol=1e-05, atol=1e-08, equal_nan=False).all()
+
+
+def test_linear_image_correction():
+    #---------------load some pre-computed data.
+    #seems autolens calculate the lensing potential slowly (due to the integration calculation). Check this point
+    with open('test/data/linear_image_correction.pkl','rb') as f:
+        preload_data = pickle.load(f)
+        dpsi_sparse_1d = preload_data['dpsi_sparse_1d']
+        pt_image_correction_true = preload_data['pt_image_correction_true']
+
+    #--------tracer with subhalo
+    lens_galaxy = al.Galaxy(
+        redshift=0.2,
+        mass=al.mp.EllIsothermal(
+            centre=(0.0, 0.0),
+            einstein_radius=1.2,
+            elliptical_comps=al.convert.elliptical_comps_from(axis_ratio=0.9, angle=45.0),
+        ),
+        subhalo=al.mp.SphIsothermal(
+            centre=(1.15, 0.0),
+            einstein_radius=0.01,
+        )
+    )
+    source_galaxy = al.Galaxy(
+        redshift=0.6,
+        bulge=al.lp.EllSersic(
+            centre=(0.0, 0.0),
+            elliptical_comps=al.convert.elliptical_comps_from(axis_ratio=0.7, angle=60.0),
+            intensity=0.8,
+            effective_radius=0.1,
+            sersic_index=1.0,
+        ),
+    )
+    tracer_with_sub = al.Tracer.from_galaxies(galaxies=[lens_galaxy, source_galaxy])
+
+    #--------tracer without subhalo
+    lens_galaxy = al.Galaxy(
+        redshift=0.2,
+        mass=al.mp.EllIsothermal(
+            centre=(0.0, 0.0),
+            einstein_radius=1.2,
+            elliptical_comps=al.convert.elliptical_comps_from(axis_ratio=0.9, angle=45.0),
+        ),
+    )
+    tracer_no_sub = al.Tracer.from_galaxies(galaxies=[lens_galaxy, source_galaxy])
+
+    #----------get dpsi sparse grid object
+    mask_data = al.Mask2D.circular_annular(
+        shape_native=(200, 200), pixel_scales=0.05, inner_radius=1.2*(1-0.4), outer_radius=1.2*(1+0.4)
+    )
+    grid_obj = grid_util.SparseDpsiGrid(mask_data, 0.05, (200, 200))
+
+    #-----------------get dpsi gradient matrix, see eq.7 $D_{\psi}$ term in our document
+    dpsi_gradient_matrix = pcu.dpsi_gradient_operator_from(grid_obj.Hx_dpsi, grid_obj.Hy_dpsi) 
+
+    #-------src gradient matrix
+    image_grid_vec_numpy = np.vstack([grid_obj.ygrid_data_1d, grid_obj.xgrid_data_1d]).T
+    image_grid_vec_al = al.Grid2DIrregular(image_grid_vec_numpy)
+    alpha_src_yx = tracer_no_sub.deflections_yx_2d_from(image_grid_vec_al)
+    source_points = image_grid_vec_al - alpha_src_yx #I suppose this represents the source pixelization grid
+    source_values = tracer_with_sub.galaxies[1].image_2d_from(grid=source_points) #I suppose this represents the source reconstruction
+
+    dpsi_grid_vec_numpy = np.vstack([grid_obj.ygrid_dpsi_1d, grid_obj.xgrid_dpsi_1d]).T
+    dpsi_grid_vec_al = al.Grid2DIrregular(dpsi_grid_vec_numpy)
+    alpha_dpsi_yx = tracer_no_sub.deflections_yx_2d_from(dpsi_grid_vec_al)
+    src_plane_dpsi_yx = dpsi_grid_vec_al - alpha_dpsi_yx #the location of dpsi grid on the source-plane, under the lens mapping relation given by macro model (without subhalo)
+
+    source_gradient = pcu.source_gradient_from(
+        source_points, 
+        source_values, 
+        src_plane_dpsi_yx, 
+        cross_size=1e-3,
+    )
+    source_gradient_matrix = pcu.source_gradient_matrix_from(source_gradient) #shape: [Np, 2Np]
+
+    #------------conformation matrix, see the C_f matrix (eq.7) in our document
+    Cf_matrix = np.copy(grid_obj.map_matrix)
+
+    #-------------linear response
+    pt_image_correction = -1.0*np.matmul(
+        Cf_matrix,
+        np.matmul(
+            source_gradient_matrix,
+            np.matmul(dpsi_gradient_matrix, dpsi_sparse_1d),
+        )
+    )
+
+    assert np.isclose(pt_image_correction, pt_image_correction_true, rtol=1e-05, atol=1e-08, equal_nan=False).all()
+    
