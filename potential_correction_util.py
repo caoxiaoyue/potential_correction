@@ -91,6 +91,46 @@ def order_4th_reg_matrix(Hx_4th, Hy_4th):
     return np.matmul(Hx_4th.T, Hx_4th) + np.matmul(Hy_4th.T, Hy_4th)
 
 
+def solve_psi_rescale_factor(fix_psi_values, fix_points, psi_new):
+    """
+    solve the rescaling factor of psi
+    This is necessary to ensure potential correction converge
+
+    Input:
+        fix_psi_values (array): the intial lensing potential that we want to keep fixed during potential correction
+        fix_points (array): the location of psi_init. shape: (3,2) [[y1,x1], [y2,x2], [y3,x3]]
+        psi_new (array): the new lensing potential value given by potential correction algorithm, which will be recaled.
+    both array shape are (3,)
+
+    Output:
+    return the rescale factor a1,a2 ($\vec{a}$) and c;
+    see eq.22 and chapter-2.3 in our document
+    """
+    A_matrix = np.hstack([fix_points, np.ones(3).reshape(3,1)])
+    b_vector = fix_psi_values - psi_new
+    a_y, a_x, c = np.linalg.solve(A_matrix, b_vector)
+    return a_y, a_x, c
+
+
+def rescale_psi_map(fix_psi_values, fix_points, psi_new, psi_map, xgrid, ygrid):
+    """
+    rescale the psi_new potential according to psi_init
+    see eq.22 and chapter-2.3 in our document
+
+    Input:
+        fix_psi_values (array): the intial lensing potential values that we want to keep fixed during potential correction; shape (3,)
+        fix_points (array): the location (cooridinates) of psi_init. shape: (3,2); [(y1,x1), (y2,x2), (y3,x3)]
+        psi_new (array): the new lensing potential value given by ptential correction algorithm; shape (3,)
+        psi_map: the lensing potential map we want to rescale. A 2d array
+        xgrid, ygrid: the x/y coordinates of psi_map, same shape as psi_map
+
+    Output::
+        array: the rescaled lensing potential map
+    """
+    a_y, a_x, c = solve_psi_rescale_factor(fix_psi_values, fix_points, psi_new)
+    return a_x*xgrid + a_y*ygrid + c + psi_map
+
+
 if __name__ == '__main__':
     #An dpsi_gradient_operator test
     grid_data = al.Grid2D.uniform(shape_native=(10,10), pixel_scales=0.1, sub_size=1)

@@ -139,4 +139,36 @@ def test_linear_image_correction():
     )
 
     assert np.isclose(pt_image_correction, pt_image_correction_true, rtol=1e-05, atol=1e-08, equal_nan=False).all()
+
+
+def test_rescale_psi_map():
+    lens_galaxy = al.Galaxy(
+        redshift=0.2,
+        mass=al.mp.EllIsothermal(
+            centre=(0.0, 0.0),
+            einstein_radius=1.2,
+            elliptical_comps=al.convert.elliptical_comps_from(axis_ratio=0.9, angle=45.0),
+        ),
+    )
+    grid = al.Grid2D.uniform(shape_native=(10,10), pixel_scales=0.1, sub_size=1)
+    ygrid = grid.native[:,:,0]
+    xgrid = grid.native[:,:,1]
+
+    fix_points = al.Grid2DIrregular([(0.0, 0.2), (0.1, 0.0), (0.0,-0.05)])
+    fix_psi_values = lens_galaxy.potential_1d_from(fix_points)
+    a_y_transfor = -0.9
+    a_x_transfor = 1.1
+    c_transfor = 5.0
+    psi_new = np.sum(fix_points*np.tile([a_y_transfor, a_x_transfor], 3).reshape(3,-1), axis=1) + c_transfor + fix_psi_values
+
+    a_y, a_x, c = pcu.solve_psi_rescale_factor(fix_psi_values, fix_points, psi_new)
+    psi_transform = np.sum(fix_points*np.tile([a_y, a_x], 3).reshape(3,-1), axis=1) + c + psi_new 
+    assert np.isclose(psi_transform, fix_psi_values, rtol=1e-05, atol=1e-08, equal_nan=False).all()
+
+
+    psi_map_origin = lens_galaxy.potential_2d_from(grid).native
+    psi_map_new = a_y_transfor*ygrid + a_x_transfor*xgrid + c_transfor + psi_map_origin
+    psi_map_rescale = pcu.rescale_psi_map(fix_psi_values, fix_points, psi_new, psi_map_new, xgrid, ygrid)
+    assert np.isclose(psi_map_rescale, psi_map_origin, rtol=1e-05, atol=1e-08, equal_nan=False).all()
+
     
