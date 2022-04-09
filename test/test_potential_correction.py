@@ -171,4 +171,26 @@ def test_rescale_psi_map():
     psi_map_rescale = pcu.rescale_psi_map(fix_psi_values, fix_points, psi_new, psi_map_new, xgrid, ygrid)
     assert np.isclose(psi_map_rescale, psi_map_origin, rtol=1e-05, atol=1e-08, equal_nan=False).all()
 
-    
+
+def test_LinearNDInterpolatorExt():
+    x = np.linspace(0,10, 11)
+    y = np.linspace(0,10, 11)
+    x, y = np.meshgrid(x, y)
+    def linear_func(x, y):
+        return 2*x + 3*y + 1
+    z = linear_func(x,y)
+
+    linear_ext_object = pcu.LinearNDInterpolatorExt(list(zip(x.flatten(),y.flatten())),z.flatten())
+    # linear_ext_object = LinearNDInterpolator(list(zip(x.flatten(),y.flatten())),z.flatten())
+
+    z_inter = linear_ext_object(x, y)
+    assert np.allclose(z_inter, z, rtol=1e-05, atol=1e-08, equal_nan=False)
+
+
+    x_out = np.array([-1, 10])
+    y_out = np.array([-1, 10])
+    x_bound = np.array([0, 9])
+    y_bound = np.array([0, 9])
+    z_out = linear_ext_object(x_out, y_out)
+    z_bound = linear_ext_object(x_out, y_out)
+    assert np.allclose(z_out, z_bound, rtol=1e-05, atol=1e-08, equal_nan=False)

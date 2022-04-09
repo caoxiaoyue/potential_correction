@@ -1,7 +1,7 @@
 import numpy as np
-from scipy.interpolate import LinearNDInterpolator
 import grid_util
 from scipy.spatial import Delaunay
+from potential_correction_util import LinearNDInterpolatorExt
 
 class PixelizedMass(object):
     """
@@ -52,10 +52,10 @@ class PixelizedMass(object):
 
 
     def update_interpolator(self):
-        self.interp_psi = LinearNDInterpolator(self.tri, self.psi_1d)
-        self.interp_alphax = LinearNDInterpolator(self.tri, self.alphax_1d)
-        self.interp_alphay = LinearNDInterpolator(self.tri, self.alphay_1d)
-        self.interp_kappa = LinearNDInterpolator(self.tri, self.kappa_1d)
+        self.interp_psi = LinearNDInterpolatorExt(self.tri, self.psi_1d)
+        self.interp_alphax = LinearNDInterpolatorExt(self.tri, self.alphax_1d)
+        self.interp_alphay = LinearNDInterpolatorExt(self.tri, self.alphay_1d)
+        self.interp_kappa = LinearNDInterpolatorExt(self.tri, self.kappa_1d)
 
     
     def eval_psi_at(self, points=None):

@@ -1,7 +1,10 @@
 import autolens as al
 import numpy as np
-from scipy.interpolate import griddata #, CloughTocher2DInterpolator
+from scipy.interpolate import LinearNDInterpolator as linterp
+from scipy.interpolate import NearestNDInterpolator as nearest
+from scipy.interpolate import griddata  # , CloughTocher2DInterpolator
 import grid_util
+
 
 def source_gradient_from(source_points, source_values, eval_points, cross_size=1e-3):
     """
@@ -129,6 +132,23 @@ def rescale_psi_map(fix_psi_values, fix_points, psi_new, psi_map, xgrid, ygrid):
     """
     a_y, a_x, c = solve_psi_rescale_factor(fix_psi_values, fix_points, psi_new)
     return a_x*xgrid + a_y*ygrid + c + psi_map
+
+
+class LinearNDInterpolatorExt(object):
+    # https://stackoverflow.com/questions/20516762/extrapolate-with-linearndinterpolator
+    # use nearest neighbour interpolation to replace Linear interpolation, to avoid NaN
+
+    def __init__(self, points, values):
+        self.funcinterp = linterp(points, values)
+        self.funcnearest = nearest(points, values)
+    
+    def __call__(self, *args):
+        z = self.funcinterp(*args)
+        chk = np.isnan(z)
+        if chk.any():
+            return np.where(chk, self.funcnearest(*args), z)
+        else:
+            return z
 
 
 if __name__ == '__main__':
