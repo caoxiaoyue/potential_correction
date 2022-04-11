@@ -11,10 +11,10 @@ import pytest
 current_dir, current_file_name = os.path.split(os.path.abspath(__file__))
 
 def test_pixelized_source():
-    with open(f'{current_dir}/data/masked_imaging.pkl','rb') as f:
+    with open(f'{current_dir}/data/pixelized_source/masked_imaging.pkl','rb') as f:
         masked_imaging = pickle.load(f)
 
-    with open(f'{current_dir}/data/mass_psi_for_inversion.pkl','rb') as f:
+    with open(f'{current_dir}/data/pixelized_source/mass_psi_for_inversion.pkl','rb') as f:
         psi_2d = pickle.load(f)
 
     ygrid =  masked_imaging.grid.unmasked_grid.binned.native[:,:,0]

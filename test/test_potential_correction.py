@@ -49,14 +49,14 @@ def test_dpsi_gradient_operator_matrix():
     grid_obj = grid_util.SparseDpsiGrid(mask, 0.1, shape_2d_dpsi=(5,5))
 
     dpsi_gradient_matrix = pcu.dpsi_gradient_operator_from(grid_obj.Hx_dpsi, grid_obj.Hy_dpsi)
-    dpsi_gradient_matrix_true = np.loadtxt(f'{current_dir}/data/dpsi_gradient_matrix.txt')
+    dpsi_gradient_matrix_true = np.loadtxt(f'{current_dir}/data/potential_correction/dpsi_gradient_matrix.txt')
     assert np.isclose(dpsi_gradient_matrix, dpsi_gradient_matrix_true, rtol=1e-05, atol=1e-08, equal_nan=False).all()
 
 
 def test_linear_image_correction():
     #---------------load some pre-computed data.
     #seems autolens calculate the lensing potential slowly (due to the integration calculation). Check this point
-    with open('test/data/linear_image_correction.pkl','rb') as f:
+    with open('test/data/potential_correction/linear_image_correction.pkl','rb') as f:
         preload_data = pickle.load(f)
         dpsi_sparse_1d = preload_data['dpsi_sparse_1d']
         pt_image_correction_true = preload_data['pt_image_correction_true']

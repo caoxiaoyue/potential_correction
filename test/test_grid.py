@@ -63,8 +63,8 @@ def test_pixel_type_from_mask():
     pixel_type_data = grid_util.pixel_type_from_mask(grid_obj.mask_data)
     pixel_type_dpsi = grid_util.pixel_type_from_mask(grid_obj.mask_dpsi)
 
-    true_pixel_type_data = np.loadtxt(f'{current_dir}/data/pixel_type_data.txt').astype('int')
-    true_pixel_type_dpsi = np.loadtxt(f'{current_dir}/data/pixel_type_dpsi.txt').astype('int')
+    true_pixel_type_data = np.loadtxt(f'{current_dir}/data/grid/pixel_type_data.txt').astype('int')
+    true_pixel_type_dpsi = np.loadtxt(f'{current_dir}/data/grid/pixel_type_dpsi.txt').astype('int')
 
     assert np.isclose(pixel_type_data, true_pixel_type_data, rtol=1e-05, atol=1e-08, equal_nan=False).all()
     assert np.isclose(pixel_type_dpsi, true_pixel_type_dpsi, rtol=1e-05, atol=1e-08, equal_nan=False).all()
@@ -107,54 +107,54 @@ class TestSparseDpsiGrid:
 
 
     def test_1d_data_dpsi_grid(self):
-        mask = np.loadtxt(f'{current_dir}/data/mask_data.txt').astype('bool')
+        mask = np.loadtxt(f'{current_dir}/data/grid/mask_data.txt').astype('bool')
         grid_obj = grid_util.SparseDpsiGrid(mask, 0.1, shape_2d_dpsi=(12,12))
 
-        true_mask_dpsi = np.loadtxt(f'{current_dir}/data/mask_dpsi.txt').astype('bool')
+        true_mask_dpsi = np.loadtxt(f'{current_dir}/data/grid/mask_dpsi.txt').astype('bool')
         assert (grid_obj.mask_dpsi==true_mask_dpsi).all()
 
-        true_indices_1d_dpsi = np.loadtxt(f'{current_dir}/data/indices_1d_dpsi.txt').astype('int64')
+        true_indices_1d_dpsi = np.loadtxt(f'{current_dir}/data/grid/indices_1d_dpsi.txt').astype('int64')
         assert (grid_obj.indices_1d_dpsi==true_indices_1d_dpsi).all()
 
-        true_xgrid_dpsi_1d = np.loadtxt(f'{current_dir}/data/xgrid_dpsi_1d.txt').astype('float')
+        true_xgrid_dpsi_1d = np.loadtxt(f'{current_dir}/data/grid/xgrid_dpsi_1d.txt').astype('float')
         assert np.isclose(grid_obj.xgrid_dpsi_1d, true_xgrid_dpsi_1d, rtol=1e-05, atol=1e-08, equal_nan=False).all()
 
-        true_ygrid_dpsi_1d = np.loadtxt(f'{current_dir}/data/ygrid_dpsi_1d.txt').astype('float')
+        true_ygrid_dpsi_1d = np.loadtxt(f'{current_dir}/data/grid/ygrid_dpsi_1d.txt').astype('float')
         assert np.isclose(grid_obj.ygrid_dpsi_1d, true_ygrid_dpsi_1d, rtol=1e-05, atol=1e-08, equal_nan=False).all()
 
-        true_mask_data = np.loadtxt(f'{current_dir}/data/mask_data.txt').astype('bool')
+        true_mask_data = np.loadtxt(f'{current_dir}/data/grid/mask_data.txt').astype('bool')
         assert (grid_obj.mask_data==true_mask_data).all()
 
-        true_indices_1d_data = np.loadtxt(f'{current_dir}/data/indices_1d_data.txt').astype('int64')
+        true_indices_1d_data = np.loadtxt(f'{current_dir}/data/grid/indices_1d_data.txt').astype('int64')
         assert (grid_obj.indices_1d_data==true_indices_1d_data).all()
 
-        true_xgrid_data_1d = np.loadtxt(f'{current_dir}/data/xgrid_data_1d.txt').astype('float')
+        true_xgrid_data_1d = np.loadtxt(f'{current_dir}/data/grid/xgrid_data_1d.txt').astype('float')
         assert np.isclose(grid_obj.xgrid_data_1d, true_xgrid_data_1d, rtol=1e-05, atol=1e-08, equal_nan=False).all()
 
-        true_ygrid_data_1d = np.loadtxt(f'{current_dir}/data/ygrid_data_1d.txt').astype('float')
+        true_ygrid_data_1d = np.loadtxt(f'{current_dir}/data/grid/ygrid_data_1d.txt').astype('float')
         assert np.isclose(grid_obj.ygrid_data_1d, true_ygrid_data_1d, rtol=1e-05, atol=1e-08, equal_nan=False).all()
 
 
     def test_sparse_box_grid(self):
-        mask = np.loadtxt(f'{current_dir}/data/mask_data.txt').astype('bool')
+        mask = np.loadtxt(f'{current_dir}/data/grid/mask_data.txt').astype('bool')
         grid_obj = grid_util.SparseDpsiGrid(mask, 0.1, shape_2d_dpsi=(12,12))  
 
-        true_sparse_box_xcenter = np.loadtxt(f'{current_dir}/data/sparse_box_xcenter.txt').astype('float')
+        true_sparse_box_xcenter = np.loadtxt(f'{current_dir}/data/grid/sparse_box_xcenter.txt').astype('float')
         assert np.isclose(grid_obj.sparse_box_xcenter, true_sparse_box_xcenter, rtol=1e-05, atol=1e-08, equal_nan=False).all()
 
-        true_sparse_box_ycenter = np.loadtxt(f'{current_dir}/data/sparse_box_ycenter.txt').astype('float')
+        true_sparse_box_ycenter = np.loadtxt(f'{current_dir}/data/grid/sparse_box_ycenter.txt').astype('float')
         assert np.isclose(grid_obj.sparse_box_ycenter, true_sparse_box_ycenter, rtol=1e-05, atol=1e-08, equal_nan=False).all()
 
-        true_mask_sparse_box = np.loadtxt(f'{current_dir}/data/mask_sparse_box.txt').astype('bool')
+        true_mask_sparse_box = np.loadtxt(f'{current_dir}/data/grid/mask_sparse_box.txt').astype('bool')
         assert (grid_obj.mask_sparse_box==true_mask_sparse_box).all()
 
-        true_indices_1d_sparse_box = np.loadtxt(f'{current_dir}/data/indices_1d_sparse_box.txt').astype('int64')
+        true_indices_1d_sparse_box = np.loadtxt(f'{current_dir}/data/grid/indices_1d_sparse_box.txt').astype('int64')
         assert (grid_obj.indices_1d_sparse_box==true_indices_1d_sparse_box).all()
 
-        true_sparse_box_xcenter_1d = np.loadtxt(f'{current_dir}/data/sparse_box_xcenter_1d.txt').astype('float')
+        true_sparse_box_xcenter_1d = np.loadtxt(f'{current_dir}/data/grid/sparse_box_xcenter_1d.txt').astype('float')
         assert np.isclose(grid_obj.sparse_box_xcenter_1d, true_sparse_box_xcenter_1d, rtol=1e-05, atol=1e-08, equal_nan=False).all()
 
-        true_sparse_box_ycenter_1d = np.loadtxt(f'{current_dir}/data/sparse_box_ycenter_1d.txt').astype('float')
+        true_sparse_box_ycenter_1d = np.loadtxt(f'{current_dir}/data/grid/sparse_box_ycenter_1d.txt').astype('float')
         assert np.isclose(grid_obj.sparse_box_ycenter_1d, true_sparse_box_ycenter_1d, rtol=1e-05, atol=1e-08, equal_nan=False).all()
 
 
@@ -166,7 +166,7 @@ class TestSparseDpsiGrid:
         mask = (rgrid>0.25)
         grid_obj = grid_util.SparseDpsiGrid(mask, 0.1, shape_2d_dpsi=(10,10))
 
-        with open('test/data/data_dpsi_pair_info.pkl','rb') as f:
+        with open('test/data/grid/data_dpsi_pair_info.pkl','rb') as f:
             true_data_dpsi_pair_info = pickle.load(f).astype('float')
         assert np.isclose(grid_obj.data_dpsi_pair_info, true_data_dpsi_pair_info, rtol=1e-05, atol=1e-08, equal_nan=False).all()
 
@@ -222,8 +222,8 @@ class TestSparseDpsiGrid:
         annular_mask = (rgrid>5.0) #np.logical_or(rgrid<1.0, rgrid>4.0)
         grid_obj = grid_util.SparseDpsiGrid(annular_mask, 1.0, shape_2d_dpsi=(10,10))
 
-        true_Hy_dpsi_4th = np.loadtxt(f'{current_dir}/data/Hy_dpsi_4th.txt')
-        true_Hx_dpsi_4th = np.loadtxt(f'{current_dir}/data/Hx_dpsi_4th.txt')
+        true_Hy_dpsi_4th = np.loadtxt(f'{current_dir}/data/grid/Hy_dpsi_4th.txt')
+        true_Hx_dpsi_4th = np.loadtxt(f'{current_dir}/data/grid/Hx_dpsi_4th.txt')
 
         assert np.isclose(grid_obj.Hy_dpsi_4th, true_Hy_dpsi_4th, rtol=1e-05, atol=1e-08, equal_nan=False).all()
         assert np.isclose(grid_obj.Hx_dpsi_4th, true_Hx_dpsi_4th, rtol=1e-05, atol=1e-08, equal_nan=False).all()   
