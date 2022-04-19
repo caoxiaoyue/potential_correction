@@ -51,36 +51,38 @@ class IterativePotentialCorrect(object):
         dpsi_anchor_points has the following form: [(y1,x1), (y2,x2), (y3,x3)]
         """
         self._niter = niter
-        self.lam_s_0 = lam_s_0
-        self.lam_dpsi_0 = lam_dpsi_0
+        self._lam_s_0 = lam_s_0
+        self._lam_dpsi_0 = lam_dpsi_0
         self._psi_anchor_points = psi_anchor_points
-
-        self.iter_count = 0 #count the iteration number
-        self.lam_s_current = self.lam_s_0 #source regularization strength of current iteration
-        self.lam_dpsi_current = self.lam_dpsi_0 #potential correction regularization strength of current iteration
-
         self._psi_2d_0 = psi_2d_0
         self._psi_2d_0[self.masked_imaging.mask] = 0.0 #set the lens potential of masked pixels to 0
+
+        self.iter_count = 0 #count the iteration number
+        self.lam_s_current = self._lam_s_0 #source regularization strength of current iteration
+        self.lam_dpsi_current = self._lam_dpsi_0 #potential correction regularization strength of current iteration
+
         self.psi_correction_2d = np.zeros_like(self._psi_2d_0, dtype='float') #the 2d poential correction in native image resolution.
         self.psi_2d_current = self._psi_2d_0 + self.psi_correction_2d #current best-fit lens mass model
+        self.pix_mass_current = self.pixelized_mass_from(self.psi_2d_current)
 
-        self.pix_mass_current = self.construct_pixelized_mass(self.psi_2d_current)
-        #pix src obj is mainly used for evalulating lens mapping matrix given currect lens mass model, also initialize the source light model 
+        #pix src obj is mainly used for evalulating lens mapping matrix given a lens mass model
         self.pix_src_obj = pixelized_source.PixelizedSource(
             self.masked_imaging, 
             pixelization_shape_2d=self.shape_2d_src,
         ) 
-
-        self._psi_anchor_values = self.pix_mass_current.eval_psi_at(self._psi_anchor_points)
-        #current best-fit source reconstruction
+        #do the source inversion for the initial mass model
         self.pix_src_obj.source_inversion(
             self.pix_mass_current, 
             lam_s=self.lam_s_current,
         )
         #Note: self.s_points_current are given in autolens [(y1,x1),(y2,x2),...] order
-        self.s_values_current = self.pix_src_obj.src_recontruct[:] #the intensity values of current best-fit pixelized source model
-        self.s_points_current = np.copy(self.pix_src_obj.relocated_pixelization_grid) #the location of pixelized source grids (on source-plane).
+        self._s_values_0 = self.pix_src_obj.src_recontruct[:] #the intensity values of current best-fit pixelized source model
+        self._s_points_0 = np.copy(self.pix_src_obj.relocated_pixelization_grid) #the location of pixelized source grids (on source-plane).
 
+        self.s_values_current = np.copy(self._s_values_0)
+        self.s_points_current = np.copy(self._s_points_0)
+
+        self._psi_anchor_values = self.pix_mass_current.eval_psi_at(self._psi_anchor_points)
         self.pix_src_obj.inverse_covariance_matrix()
         self.inv_cov_matrix =  np.copy(self.pix_src_obj.inv_cov_mat) #inverse covariance matrix
         self._ns = len(self.s_values_current) #number source grids
@@ -101,7 +103,7 @@ class IterativePotentialCorrect(object):
         self.merit_current = self.merit_0
 
 
-    def construct_pixelized_mass(self, psi_2d):
+    def pixelized_mass_from(self, psi_2d):
         pix_mass_obj = pixelized_mass.PixelizedMass(
             xgrid=self.grid_obj.xgrid_data, 
             ygrid=self.grid_obj.ygrid_data, 
@@ -225,7 +227,7 @@ class IterativePotentialCorrect(object):
         self.s_points_current = np.copy(self.pix_src_obj.relocated_pixelization_grid)
     
         # update current pixelized mass model
-        self.pix_mass_current = self.construct_pixelized_mass(self.psi_2d_current)
+        self.pix_mass_current = self.pixelized_mass_from(self.psi_2d_current)
         return False 
 
     
@@ -366,7 +368,7 @@ class IterativePotentialCorrect(object):
         plt.subplot(234)
         this_ax = plt.gca()
         ps_plot.visualize_source(self.s_points_current, self.s_values_current, ax=this_ax)
-        plt.title('Source')
+        this_ax.set_title('Source')
         plt.xlabel('Arcsec')
         plt.ylabel('Arcsec')
 

@@ -82,5 +82,6 @@ ps_plot.visualize_unmasked_1d_image(masked_imaging.data, masked_imaging.mask, dp
 ps_plot.visualize_unmasked_1d_image(pix_src.mapped_reconstructed_image, masked_imaging.mask, dpix=masked_imaging.pixel_scales[0], ax=axes[0,1])
 ps_plot.visualize_unmasked_1d_image(pix_src.norm_residual_map, masked_imaging.mask, dpix=masked_imaging.pixel_scales[0], ax=axes[1,0])
 ps_plot.visualize_source(pix_src.relocated_pixelization_grid, pix_src.src_recontruct, ax=axes[1,1])
+fig.savefig('my_pix_src.jpg')
 
 # %%
