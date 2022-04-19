@@ -22,12 +22,13 @@ def visualize_source(
     half_width *= enlarge_factor
     extent = [-1.0*half_width, half_width, -1.0*half_width, half_width]
 
-    coordinate_1d = np.linspace(-1.0*half_width, half_width, npixels, endpoint=True)
-    xgrid, ygrid = np.meshgrid(coordinate_1d, coordinate_1d) 
+    coordinate_1d, dpix = np.linspace(-1.0*half_width, half_width, npixels, endpoint=True, retstep=True)
+    xgrid, ygrid = np.meshgrid(coordinate_1d, coordinate_1d)
+    extent = [-1.0*half_width-0.5*dpix, half_width+0.5*dpix, -1.0*half_width-0.5*dpix, half_width+0.5*dpix]
 
     source_image = griddata(points, values, (xgrid, ygrid), method='linear', fill_value=0.0)
 
-    im = ax.imshow(source_image, origin='lower', extent=extent, cmap=cmap)
+    im = ax.imshow(source_image, origin='lower', extent=extent, cmap=cmap) 
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
     plt.colorbar(im, cax=cax)
@@ -38,7 +39,8 @@ def visualize_unmasked_1d_image(
     mask, 
     dpix, 
     ax=None, 
-    cmap='jet'
+    cmap='jet',
+    origin='upper',
 ):
     """
     mask: the 2d data mask
@@ -54,7 +56,7 @@ def visualize_unmasked_1d_image(
 
     unmasked_2d_image = np.ma.masked_array(unmasked_2d_image, mask=mask)
 
-    im = ax.imshow(unmasked_2d_image, origin='lower', extent=extent, cmap=cmap)
+    im = ax.imshow(unmasked_2d_image, origin=origin, extent=extent, cmap=cmap)
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
     plt.colorbar(im, cax=cax)

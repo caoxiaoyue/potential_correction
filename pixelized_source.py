@@ -64,7 +64,7 @@ class PixelizedSource(object):
         #Note, I add this new method to `convolver` class, this is the `B` matrix in our document
 
 
-    def build_lens_mapping(self, pixelized_mass_obj):
+    def build_lens_mapper(self, pixelized_mass_obj):
         self.source_position_from(pixelized_mass_obj)
 
         grid_delaunay = al.Grid2DDelaunay(
@@ -77,6 +77,10 @@ class PixelizedSource(object):
             source_pixelization_grid=grid_delaunay,
             data_pixelization_grid=self.sparse_image_plane_grid, 
         )
+
+
+    def build_lens_mapping(self, pixelized_mass_obj):
+        self.build_lens_mapper(pixelized_mass_obj)
 
         self.mapping_matrix = al.util.mapper.mapping_matrix_from(
             pix_indexes_for_sub_slim_index=self.mapper.pix_indexes_for_sub_slim_index,

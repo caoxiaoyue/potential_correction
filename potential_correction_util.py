@@ -115,23 +115,23 @@ def solve_psi_rescale_factor(fix_psi_values, fix_points, psi_new):
     return a_y, a_x, c
 
 
-def rescale_psi_map(fix_psi_values, fix_points, psi_new, psi_map, xgrid, ygrid):
+def rescale_psi_map(psi_anchor_values, psi_anchor_points, psi_new, psi_map_new, xgrid, ygrid):
     """
     rescale the psi_new potential according to psi_init
     see eq.22 and chapter-2.3 in our document
 
     Input:
-        fix_psi_values (array): the intial lensing potential values that we want to keep fixed during potential correction; shape (3,)
-        fix_points (array): the location (cooridinates) of psi_init. shape: (3,2); [(y1,x1), (y2,x2), (y3,x3)]
-        psi_new (array): the new lensing potential value given by ptential correction algorithm; shape (3,)
-        psi_map: the lensing potential map we want to rescale. A 2d array
+        psi_anchor_values (array): the intial lensing potential values that we want to keep fixed during potential correction; shape (3,)
+        psi_anchor_points (array): the location (cooridinates) of psi_init. shape: (3,2); [(y1,x1), (y2,x2), (y3,x3)]
+        psi_new (array): the new lensing potential value given by potential correction algorithm; shape (3,)
+        psi_map_new: the new lens potential map that we want to rescale. A 2d array
         xgrid, ygrid: the x/y coordinates of psi_map, same shape as psi_map
 
     Output::
         array: the rescaled lensing potential map
     """
-    a_y, a_x, c = solve_psi_rescale_factor(fix_psi_values, fix_points, psi_new)
-    return a_x*xgrid + a_y*ygrid + c + psi_map
+    a_y, a_x, c = solve_psi_rescale_factor(psi_anchor_values, psi_anchor_points, psi_new)
+    return a_x*xgrid + a_y*ygrid + c + psi_map_new
 
 
 class LinearNDInterpolatorExt(object):

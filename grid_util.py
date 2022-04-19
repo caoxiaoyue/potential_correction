@@ -200,6 +200,63 @@ def gradient_operator_from_mask(mask, dpix=0.05):
     return Hy, Hx
 
 
+def diff_2nd_operator_from_mask(mask, dpix=0.05):
+    """
+    Receive a mask, use it to generate the 2nd differential operator matrix Hxx and Hyy.
+    Hxx (Hyy) has a shape of [n_unmasked_pixels, n_unmasked_pixels],
+    when it act on the unmasked data, generating the 2th x/y-derivative of the unmasked data.
+
+    dpix: pixel size in unit of arcsec.
+    """
+    unmask = ~mask
+    i_indices_unmasked, j_indices_unmasked = np.where(unmask)
+    indices_1d_unmasked = np.where(unmask.flatten())[0]
+    n_unmasked_pixels = len(i_indices_unmasked) 
+    Hxx = np.zeros((n_unmasked_pixels, n_unmasked_pixels)) #x-direction gradient operator matrix
+    Hyy = np.zeros((n_unmasked_pixels, n_unmasked_pixels)) #y-direction gradient operator matrix
+    step_y = -1.0*dpix #the minus sign is due to the y-coordinate decrease the pixel_size as index i along axis-0 increase 1.
+    step_x = 1.0*dpix #no minus, becasue the x-coordinate increase as index j along axis-1 increase.
+
+    for count in range(n_unmasked_pixels):
+        i, j = i_indices_unmasked[count], j_indices_unmasked[count]
+        #------check y-direction
+        #try 2th diff first
+        if unmask[i-1,j] and unmask[i+1,j]: #2th central diff
+            indices_tmp = np.ravel_multi_index([(i-1, i, i+1), (j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hyy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_y**2   
+        elif unmask[i+1,j] and unmask[i+2,j]: #2th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i+1, i+2), (j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hyy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_y**2   
+        elif unmask[i-1,j] and unmask[i-2,j]: #2th backward diff
+            indices_tmp = np.ravel_multi_index([(i, i-1, i-2), (j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hyy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_y**2     
+        #if 2th diff fails, just do nothing, so that the 2nd diff along y-directon is 0
+        else:
+            pass 
+        #------check x-direction  
+        #try 2th diff;
+        if unmask[i, j-1] and unmask[i, j+1]: #2th central diff
+            indices_tmp = np.ravel_multi_index([(i, i, i), (j-1, j, j+1)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hxx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_x**2   
+        elif unmask[i, j+1] and unmask[i, j+2]: #2th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i, i), (j, j+1, j+2)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hxx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_x**2   
+        elif unmask[i, j-1] and unmask[i, j-2]: #2th backward diff
+            indices_tmp = np.ravel_multi_index([(i, i, i), (j, j-1, j-2)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hxx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_x**2  
+        #if 2th diff fails, just do nothing, so that the 2nd diff along x-directon is 0
+        else:
+            pass
+
+    return Hyy, Hxx
+
+
 def diff_4th_operator_from_mask(mask, dpix=0.05):
     """
     Receive a mask, use it to generate the 4th differtial operator matrix Hx_4th and Hy_4th.
@@ -346,6 +403,7 @@ class SparseDpsiGrid(object):
         self.get_gradient_operator_data()
         self.get_gradient_operator_dpsi()
         self.get_diff_4th_operator_dpsi()
+        self.get_hamiltonian_operator_data()
 
 
     def mask_dpsi_from_data(self):
@@ -466,6 +524,10 @@ class SparseDpsiGrid(object):
     def get_diff_4th_operator_dpsi(self):
         self.Hy_dpsi_4th, self.Hx_dpsi_4th = diff_4th_operator_from_mask(self.mask_dpsi, self.dpix_dpsi)
 
+
+    def get_hamiltonian_operator_data(self):
+        self.Hyy_data, self.Hxx_data = diff_2nd_operator_from_mask(self.mask_data, self.dpix_data)
+        self.hamiltonian_data = self.Hxx_data + self.Hyy_data
 
 
 if __name__ == '__main__':
