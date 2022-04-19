@@ -316,7 +316,10 @@ def diff_4th_operator_from_mask(mask, dpix=0.05):
         elif unmask[i-1,j]: #1th backward diff
             indices_tmp = np.ravel_multi_index([(i, i-1), (j, j)], unmask.shape)
             indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
-            Hy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -1.0])/step_y  
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -1.0])/step_y 
+        #if 1th fails, set the zero order drawback
+        else:
+            Hy[count,count] = 1.0 
 
         #------check x-direction
         #try 4th diff first
@@ -363,6 +366,9 @@ def diff_4th_operator_from_mask(mask, dpix=0.05):
             indices_tmp = np.ravel_multi_index([(i, i), (j, j-1)], unmask.shape)
             indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
             Hx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -1.0])/step_x  
+        #if 1th fails, set the zero order drawback
+        else:
+            Hx[count,count] = 1.0
 
     return Hy, Hx
 

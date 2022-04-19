@@ -304,8 +304,9 @@ class IterativePotentialCorrect(object):
         cmap.set_bad(color='white')
         myargs['cmap'] = cmap
         myargs['extent'] = copy.copy(self.grid_obj.image_bound)
+        markersize = 10
 
-        rgrid = np.sqrt(self.grid_obj.xgrid_data**2 + self.grid_obj.xgrid_data**2)
+        rgrid = np.sqrt(self.grid_obj.xgrid_data**2 + self.grid_obj.ygrid_data**2)
         limit = np.max(rgrid[~self.grid_obj.mask_data])
 
         plt.subplot(231)
@@ -313,7 +314,7 @@ class IterativePotentialCorrect(object):
         vmax = np.percentile(self.image_data,percent[1]) 
         masked_image_data = np.ma.masked_array(self.image_data, mask=self.grid_obj.mask_data)
         plt.imshow(masked_image_data,vmax=vmax,**myargs)
-        plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'w+')
+        plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
         cb.ax.tick_params(labelsize='small')
@@ -324,7 +325,8 @@ class IterativePotentialCorrect(object):
         plt.ylabel('Arcsec')
 
         mapped_reconstructed_image_2d = np.zeros_like(self.image_data)
-        mapped_reconstructed_image_2d[~self.grid_obj.mask_data] = self.mapped_reconstructed_image
+        self.pix_src_obj.source_inversion(self.pix_mass_current, lam_s=self.lam_s_current)
+        mapped_reconstructed_image_2d[~self.grid_obj.mask_data] = self.pix_src_obj.mapped_reconstructed_image
         plt.subplot(232)
         vmin = np.percentile(mapped_reconstructed_image_2d,percent[0]) 
         vmax = np.percentile(mapped_reconstructed_image_2d,percent[1])
@@ -343,7 +345,7 @@ class IterativePotentialCorrect(object):
         plt.ylabel('Arcsec')
 
         norm_residual_map_2d = np.zeros_like(self.image_data)
-        norm_residual_map_2d[~self.grid_obj.mask_data] = self.norm_residual_map
+        norm_residual_map_2d[~self.grid_obj.mask_data] = self.pix_src_obj.norm_residual_map
         plt.subplot(233)
         vmin = np.percentile(norm_residual_map_2d,percent[0]) 
         vmax = np.percentile(norm_residual_map_2d,percent[1])
@@ -377,31 +379,40 @@ class IterativePotentialCorrect(object):
         vmin = np.percentile(cumulative_psi_correct,percent[0]) 
         vmax = np.percentile(cumulative_psi_correct,percent[1]) 
         plt.imshow(masked_cumulative_psi_correct,vmin=vmin,vmax=vmax,**myargs)
+        plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
         cb.ax.tick_params(labelsize='small')
         plt.xlim(-1.0*limit, limit)
         plt.ylim(-1.0*limit, limit)
-        plt.title(r'$\delta_{\psi}$')
+        plt.title(r'potential corrections')
         plt.xlabel('Arcsec')
         plt.ylabel('Arcsec')
 
         cumulative_kappa_correct = np.zeros_like(cumulative_psi_correct)
+        cumulative_kappa_correct_1d = np.matmul(
+            self.grid_obj.hamiltonian_data,
+            cumulative_psi_correct[~self.grid_obj.mask_data]
+        )
+        cumulative_kappa_correct[~self.grid_obj.mask_data] = cumulative_kappa_correct_1d
+        masked_cumulative_kappa_correct = np.ma.masked_array(
+            cumulative_kappa_correct, 
+            mask=self.grid_obj.mask_data
+        )
         plt.subplot(236)
         vmin = None #np.percentile(self.dkappa_accum,percent[0]) 
         vmax = None #np.percentile(self.dkappa_accum,percent[1]) 
-        plt.imshow(cumulative_kappa_correct,vmin=vmin,vmax=vmax,**myargs)
+        plt.imshow(masked_cumulative_kappa_correct,vmin=vmin,vmax=vmax,**myargs)
+        plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
         cb.ax.tick_params(labelsize='small')
         plt.xlim(-1.0*limit, limit)
         plt.ylim(-1.0*limit, limit)
-        plt.title(r'$\delta_{\kappa}$')
+        plt.title(r'kappa corrections')
         plt.xlabel('Arcsec')
         plt.ylabel('Arcsec')
 
         plt.tight_layout()
         plt.savefig(f'{basedir}/{niter}.jpg', bbox_inches='tight')
         plt.close()
-
-
