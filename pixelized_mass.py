@@ -8,7 +8,7 @@ class PixelizedMass(object):
     A mass model defined on the pixelized grid
     """
 
-    def __init__(self, xgrid, ygrid, psi_map, mask, Hx=None, Hy=None):
+    def __init__(self, xgrid, ygrid, psi_map, mask, Hx=None, Hy=None, Hxx=None, Hyy=None):
         """
         xgrid: 2d x-grid
         ygrid: 2d y-grid
@@ -32,6 +32,12 @@ class PixelizedMass(object):
         else:
             self.Hy, self.Hx = Hy, Hx
 
+        if (Hxx is None) or (Hyy is None):
+            self.Hyy, self.Hxx = grid_util.diff_2nd_operator_from_mask(self.mask, self.dpix)
+        else:
+            self.Hyy, self.Hxx = Hyy, Hxx
+        self.hamiltonian_operator = self.Hyy + self.Hxx
+
         self.update_alpha_kappa_from_psi_map()
         self.update_interpolator()
 
@@ -42,8 +48,7 @@ class PixelizedMass(object):
 
 
     def convergence_map_from_psi_map(self):
-        #TODO, calculate the convergence from the psi_1d via a mapping matrix directly (similar to the gradient case)
-        self.kappa_1d =  0.5*(np.matmul(self.Hy, self.alphay_1d) + np.matmul(self.Hx, self.alphax_1d))      
+        self.kappa_1d =  0.5 * np.matmul(self.hamiltonian_operator, self.psi_1d)
 
 
     def update_alpha_kappa_from_psi_map(self):
