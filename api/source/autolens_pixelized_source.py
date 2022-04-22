@@ -51,6 +51,7 @@ def optimize_func_log(x):
 # print(ret.fun)
 # print(f'total time elapse: {t1-t0}')
 
+#above regularization strength fitting result is:
 # [2.33469951]
 # -4945.056446449687
 # total time elapse: 319.6242527961731

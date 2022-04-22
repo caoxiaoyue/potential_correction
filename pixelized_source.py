@@ -68,7 +68,7 @@ class PixelizedSource(object):
         self.source_position_from(pixelized_mass_obj)
 
         grid_delaunay = al.Grid2DDelaunay(
-            grid=self.relocated_pixelization_grid,
+            grid=self.relocated_pixelization_grid, #TODO, better make Delaunay module in autolens change to [(y1,x1), (y2,x2), ...] order
             nearest_pixelization_index_for_slim_index=self.sparse_image_plane_grid.sparse_index_for_slim_index,
         )
 

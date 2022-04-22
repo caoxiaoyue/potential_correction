@@ -16,7 +16,7 @@ def visualize_source(
     Points is defined as autolens [(y1,x1), (y2,x2), ...] order
     """
     points = np.asarray(points)
-    points  = points[::-1, :] #change to numpy/scipy api format -- [(x1,y2), (x2,y2),...] order
+    points  = points[:, ::-1] #change to numpy/scipy api format -- [(x1,y2), (x2,y2),...] order
 
     half_width = max(np.abs(points.min()), np.abs(points.max()))
     half_width *= enlarge_factor
