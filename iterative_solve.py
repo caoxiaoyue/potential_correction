@@ -33,12 +33,12 @@ class IterativePotentialCorrect(object):
         self.shape_2d_src = shape_2d_src
 
 
-    def init_iteration(
+    def initialize_iteration(
         self, 
-        psi_2d_0=None, 
+        psi_2d_start=None, 
         niter=100, 
-        lam_s_0=None, 
-        lam_dpsi_0=1e9,
+        lam_s_start=None, 
+        lam_dpsi_start=1e9,
         psi_anchor_points=None,
     ):
         """
@@ -51,45 +51,59 @@ class IterativePotentialCorrect(object):
         dpsi_anchor_points has the following form: [(y1,x1), (y2,x2), (y3,x3)]
         """
         self._niter = niter
-        self._lam_s_0 = lam_s_0
-        self._lam_dpsi_0 = lam_dpsi_0
+        self._lam_s_start = lam_s_start
+        self._lam_dpsi_start = lam_dpsi_start
         self._psi_anchor_points = psi_anchor_points
-        self._psi_2d_0 = psi_2d_0
-        self._psi_2d_0[self.masked_imaging.mask] = 0.0 #set the lens potential of masked pixels to 0
+        self._psi_2d_start = psi_2d_start
+        self._psi_2d_start[self.masked_imaging.mask] = 0.0 #set the lens potential of masked pixels to 0
 
-        self.iter_count = 0 #count the iteration number
-        self.lam_s_current = self._lam_s_0 #source regularization strength of current iteration
-        self.lam_dpsi_current = self._lam_dpsi_0 #potential correction regularization strength of current iteration
+        # self.cum_dpsi_2d_tmp = np.zeros_like(self._psi_2d_start, dtype='float') #the cumulative 2d poential correction in native image resolution.
+        # self.cum_dpsi_2d = np.zeros_like(self._psi_2d_start, dtype='float') #the cumulative 2d poential correction in native image resolution.
 
-        self.psi_correction_2d = np.zeros_like(self._psi_2d_0, dtype='float') #the 2d poential correction in native image resolution.
-        self.psi_2d_current = self._psi_2d_0 + self.psi_correction_2d #current best-fit lens mass model
-        self.pix_mass_current = self.pixelized_mass_from(self.psi_2d_current)
-
-        #pix src obj is mainly used for evalulating lens mapping matrix given a lens mass model
+        #do iteration-0, the macro model
+        self.count_iter = 0 #count the iteration number
+        #initialized some necessary info for potential correction
+        #1--------regularization of source and lens potential
+        self.lam_s_this_iter = self._lam_s_start #source regularization strength of current iteration
+        self.lam_dpsi_this_iter = self._lam_dpsi_start #potential correction regularization strength of current iteration
+        #2--------the lensing potential of currect iteration
+        self.pix_mass_this_iter = self.pixelized_mass_from(self._psi_2d_start) #init pixelized mass object
+        #3---------pix src obj is mainly used for evalulating lens mapping matrix given a lens mass model
         self.pix_src_obj = pixelized_source.PixelizedSource(
             self.masked_imaging, 
             pixelization_shape_2d=self.shape_2d_src,
         ) 
+
+        #to begin the potential correction algorithm, we need a initial guess of source light
         #do the source inversion for the initial mass model
         self.pix_src_obj.source_inversion(
-            self.pix_mass_current, 
-            lam_s=self.lam_s_current,
+            self.pix_mass_this_iter, 
+            lam_s=self.lam_s_this_iter,
         )
-        #Note: self.s_points_current are given in autolens [(y1,x1),(y2,x2),...] order
-        self._s_values_0 = self.pix_src_obj.src_recontruct[:] #the intensity values of current best-fit pixelized source model
-        self._s_points_0 = np.copy(self.pix_src_obj.relocated_pixelization_grid) #the location of pixelized source grids (on source-plane).
+        #Note: self.s_points_this_iter are given in autolens [(y1,x1),(y2,x2),...] order
+        self._s_values_start = self.pix_src_obj.src_recontruct[:] #the intensity values of current best-fit pixelized source model
+        self._s_points_start = np.copy(self.pix_src_obj.relocated_pixelization_grid) #the location of pixelized source grids (on source-plane).
+        self.s_values_this_iter = np.copy(self._s_values_start)
+        self.s_points_this_iter = np.copy(self._s_points_start)
 
-        self.s_values_current = np.copy(self._s_values_0)
-        self.s_points_current = np.copy(self._s_points_0)
-
-        self._psi_anchor_values = self.pix_mass_current.eval_psi_at(self._psi_anchor_points)
+        #Init other auxiliary info
+        self._psi_anchor_values = self.pix_mass_this_iter.eval_psi_at(self._psi_anchor_points)
         self.pix_src_obj.inverse_covariance_matrix()
         self.inv_cov_matrix =  np.copy(self.pix_src_obj.inv_cov_mat) #inverse covariance matrix
-        self._ns = len(self.s_values_current) #number source grids
+        self._ns = len(self.s_values_this_iter) #number source grids
         self._np = len(self.grid_obj.xgrid_dpsi_1d) #number dpsi grids
         self._d_1d = self.image_data[~self.grid_obj.mask_data] #1d unmasked image data
         self._n_1d = self.image_noise[~self.grid_obj.mask_data] #1d unmasked noise
-
+        self.B_matrix = np.copy(self.pix_src_obj.psf_blur_matrix) #psf bluring matrix, see eq.7 in our document
+        self.Cf_matrix = np.copy(
+            self.grid_obj.map_matrix
+        ) #see the $C_f$ matrix in our document (eq.7), which interpolate data defined on coarser dpsi grid to native image grid
+        self.Dpsi_matrix = pcu.dpsi_gradient_operator_from(
+            self.grid_obj.Hx_dpsi, 
+            self.grid_obj.Hy_dpsi
+        ) #the potential correction gradient operator, see the eq.8 in our document
+        self.dpsi_grid_points = np.vstack([self.grid_obj.ygrid_dpsi_1d, self.grid_obj.xgrid_dpsi_1d]).T #points of sparse potential correction grid
+        
         #calculate the merit of initial macro model. see eq.16 in our document 
         # merit_0 = np.sum(self.pix_src_obj.norm_residual_map**2) + \
         #     np.matmul(
@@ -100,7 +114,13 @@ class IterativePotentialCorrect(object):
         #         )
         #     )
         self.merit_0 = np.inf #float(merit_0)
-        self.merit_current = self.merit_0
+        self.merit_this_iter = self.merit_0
+
+        #visualize iteration-0
+        self.visualize_iteration(iter_num=self.count_iter)
+
+        #assign info of this iteration to the previous one
+        self.update_iterations()
 
 
     def pixelized_mass_from(self, psi_2d):
@@ -111,6 +131,8 @@ class IterativePotentialCorrect(object):
             mask=self.grid_obj.mask_data, 
             Hx=self.grid_obj.Hx_data, 
             Hy=self.grid_obj.Hy_data,
+            Hxx=self.grid_obj.Hxx_data, 
+            Hyy=self.grid_obj.Hyy_data,
         ) 
         return pix_mass_obj
 
@@ -119,115 +141,141 @@ class IterativePotentialCorrect(object):
         """
         update the regularization strength of source with iterations
         """
-        pass
+        self.lam_s_this_iter = self.lam_s_prev_iter
 
 
     def update_lam_dpsi(self):
         """
         update the regularization strength of potential correction with iterations
         """
-        # self.lam_dpsi_current = self.lam_dpsi_current * 0.1**(self.iter_count)
+        self.lam_dpsi_this_iter = self.lam_dpsi_prev_iter * 1.0 #* 0.1
         pass 
 
 
-    def construct_Mc_matrix(self):
-        #the lens map matrixces term only depend on current best-fit mass model
-        #we only use pix_src object to help us to get L_matrix
-        # we don't use it for source inversion; source reconstruction is extracted from self.r_vector
-        #i.e, simultaneously solve source and potential corrections!
-        self.pix_src_obj.build_lens_mapping(self.pix_mass_current) 
-        L_matrix = np.copy(self.pix_src_obj.mapping_matrix) #see eq.12-14 in our documents
+    def update_iterations(self):
+        self.count_iter += 1
+        #this iteration becomes previous iteration
+        self.lam_s_prev_iter = self.lam_s_this_iter
+        self.lam_dpsi_prev_iter = self.lam_dpsi_this_iter
+        self.pix_mass_prev_iter = copy.copy(self.pix_mass_this_iter)
+        self.s_values_prev_iter = np.copy(self.s_values_this_iter)
+        self.s_points_prev_iter = np.copy(self.s_points_this_iter)
+        self.merit_prev_iter = self.merit_this_iter
 
-        #evaluate source gradient matrix
-        dpsi_grid_vec = np.vstack([self.grid_obj.ygrid_dpsi_1d, self.grid_obj.xgrid_dpsi_1d]).T 
-        alpha_dpsi_yx = self.pix_mass_current.eval_alpha_yx_at(dpsi_grid_vec) #TODO, use previously found pix_mass_object to ray-tracing?
-        alpha_dpsi_yx = np.asarray(alpha_dpsi_yx).T
-        src_plane_dpsi_yx = dpsi_grid_vec - alpha_dpsi_yx #the location of dpsi grid on the source-plane
+        #erase information of this iteration 
+        self.lam_s_this_iter = None
+        self.lam_dpsi_this_iter = None
+        self.pix_mass_this_iter = None
+        self.s_values_this_iter = None
+        self.s_points_this_iter = None
+        self.merit_this_iter = None
+
+
+    def return_L_matrix(self):
+        #need to update lens mapping beforehand
+        return np.copy(self.pix_src_obj.mapping_matrix)
+
+
+    def return_Ds_matrix(self, pix_mass_obj, source_points, source_values):
+        self.alpha_dpsi_yx = pix_mass_obj.eval_alpha_yx_at(self.dpsi_grid_points) #use previously found pix_mass_object to ray-tracing
+        self.alpha_dpsi_yx = np.asarray(self.alpha_dpsi_yx).T
+        self.src_plane_dpsi_yx = self.dpsi_grid_points - self.alpha_dpsi_yx #the location of dpsi grid on the source-plane
         source_gradient = pcu.source_gradient_from(
-            self.s_points_current, ##current best-fit src pixlization grids
-            self.s_values_current, #current best-fit src reconstruction
-            src_plane_dpsi_yx, 
+            source_points, #previously found best-fit src pixlization grids
+            source_values, #previously found best-fit src reconstruction
+            self.src_plane_dpsi_yx, 
             cross_size=1e-3,
         )
-        Ds_matrix = pcu.source_gradient_matrix_from(source_gradient)
+        return pcu.source_gradient_matrix_from(source_gradient)  
 
-        #evaluate the potential correction gradient operator
-        Dpsi_matrix = pcu.dpsi_gradient_operator_from(self.grid_obj.Hx_dpsi, self.grid_obj.Hy_dpsi) 
+    
+    def return_RTR_matrix(self):
+        #need to update lens mapping beforehand
+        #see eq.21 in our document, the regularization matrix for both source and lens potential corrections.
+        RTR_matrix = np.zeros((self._ns+self._np, self._ns+self._np), dtype='float')
 
-        #conformation matrix, which interpolate data defined on coarser dpsi grid to native image grid
-        Cf_matrix = np.copy(self.grid_obj.map_matrix)
-
-        #psf bluring matrix
-        B_matrix = self.pix_src_obj.psf_blur_matrix
-
-        intensity_deficit_matrix = -1.0*np.matmul(
-            Cf_matrix,
-            np.matmul(
-                Ds_matrix,
-                Dpsi_matrix,
-            )
-        )
-
-        Lc_matrix = np.hstack([L_matrix, intensity_deficit_matrix]) #see eq.14 in our document
-        
-        self.Mc_matrix = np.matmul(B_matrix, Lc_matrix)
-
-
-    def construct_RTR_matrix(self):
-        self.RTR_matrix = np.zeros((self._ns+self._np, self._ns+self._np), dtype='float')
-
-        self.pix_src_obj.build_reg_matrix(lam_s=self.lam_s_current)
-        self.RTR_matrix[0:self._ns, 0:self._ns] = np.copy(self.pix_src_obj.regularization_matrix)
+        self.pix_src_obj.build_reg_matrix(lam_s=self.lam_s_this_iter) #this statement depend on the lens mass model (via the `mapper`)
+        RTR_matrix[0:self._ns, 0:self._ns] = np.copy(self.pix_src_obj.regularization_matrix)
 
         HTH_dpsi = np.matmul(self.grid_obj.Hx_dpsi_4th.T, self.grid_obj.Hx_dpsi_4th) + \
             np.matmul(self.grid_obj.Hy_dpsi_4th.T, self.grid_obj.Hy_dpsi_4th)
-        self.RTR_matrix[self._ns:, self._ns:] = self.lam_dpsi_current**2 * HTH_dpsi
+        RTR_matrix[self._ns:, self._ns:] = self.lam_dpsi_this_iter**2 * HTH_dpsi
+
+        return RTR_matrix    
 
 
-    def construct_data_vector(self):
-        self.data_vector = np.matmul(
+    def Mc_RTR_matrices_from(self, pix_mass_obj, source_points, source_values):
+        self.pix_src_obj.build_lens_mapping(pix_mass_obj) #update the lens mapping matrix with pixelized mass object
+
+        self.L_matrix = self.return_L_matrix()
+        self.Ds_matrix = self.return_Ds_matrix(pix_mass_obj, source_points, source_values)
+
+        self.intensity_deficit_matrix = -1.0*np.matmul(
+            self.Cf_matrix,
+            np.matmul(
+                self.Ds_matrix,
+                self.Dpsi_matrix,
+            )
+        )
+
+        self.Lc_matrix = np.hstack([self.L_matrix, self.intensity_deficit_matrix]) #see eq.14 in our document
+        self.Mc_matrix = np.matmul(self.B_matrix, self.Lc_matrix)
+
+        self.RTR_matrix = self.return_RTR_matrix()
+
+
+    def return_data_vector(self):
+        #need to update Mc_matrix beforehand
+        #see the right hand side of eq.20 in our document
+        data_vector = np.matmul(
             np.matmul(self.Mc_matrix.T, self.inv_cov_matrix),
             self._d_1d,
         )
+        return data_vector
 
     
-    def solve_for_next_iteration(self):
-        #prepare matrices for potential correction
-        self.construct_Mc_matrix()
-        self.construct_data_vector()
+    def run_this_iteration(self):
+        #update regularization parameters for this iteration
+        self.update_lam_s()
+        self.update_lam_dpsi()
 
-        #regularization matrices for source and potential corrections
-        # self.update_lam_dpsi()
-        # self.update_lam_s()
-        self.construct_RTR_matrix()
+        self.Mc_RTR_matrices_from(self.pix_mass_prev_iter, self.s_points_prev_iter, self.s_values_prev_iter)
+        data_vector = self.return_data_vector()
 
         #solve the next source and potential corrections
         temp_term = np.matmul(
             np.matmul(self.Mc_matrix.T, self.inv_cov_matrix),
             self.Mc_matrix,
         )
-        self.r_vector = linalg.solve(temp_term+self.RTR_matrix, self.data_vector)
-        self.iter_count += 1
+        self.r_vector = linalg.solve(temp_term+self.RTR_matrix, data_vector)
 
-        #update lens potential for next iterations/checking convergence
-        self.psi_correction_2d[~self.grid_obj.mask_data] = self.psi_correction_2d[~self.grid_obj.mask_data] + \
-            np.matmul(self.grid_obj.map_matrix, self.r_vector[self._ns:])
-        self.psi_2d_current = self._psi_2d_0 + self.psi_correction_2d
-        print('--------', np.max(self.r_vector[self._ns:]))
+        #extract source
+        self.s_values_this_iter = self.r_vector[0:self._ns]
+        self.s_points_this_iter = np.copy(self.pix_src_obj.relocated_pixelization_grid)
+        #extract potential correction
+        dpsi_2d = np.zeros_like(self._psi_2d_start, dtype='float')
+        dpsi_2d[~self.grid_obj.mask_data] = np.matmul(
+            self.Cf_matrix, 
+            self.r_vector[self._ns:]
+        )
+        #update lens potential with potential correction at this iteration
+        psi_2d_this_iter = self.pix_mass_prev_iter.psi_map + dpsi_2d #the new 2d lens potential map
         #rescale the current lens potential, to avoid various degeneracy problems. (see sec.2.3 in our document);
-        self.psi_2d_current = self.rescale_lens_potential(self.psi_2d_current)
+        psi_2d_this_iter = self.rescale_lens_potential(psi_2d_this_iter)
+        #get pixelized mass object of this iteration
+        self.pix_mass_this_iter = self.pixelized_mass_from(psi_2d_this_iter)
+
+        #do visualization
+        self.visualize_iteration(iter_num=self.count_iter)
 
         #check convergence
         #TODO, better to be s_{i} and psi_{i+1}?
+        self.merit_this_iter = self.return_this_iter_merit()
         if self.has_converged():
             return True
-
-        # if not converge, keep updating source
-        self.s_values_current = self.r_vector[0:self._ns]
-        self.s_points_current = np.copy(self.pix_src_obj.relocated_pixelization_grid)
-    
-        # update current pixelized mass model
-        self.pix_mass_current = self.pixelized_mass_from(self.psi_2d_current)
+            
+        # if not converge, keep updating 
+        self.update_iterations()
         return False 
 
     
@@ -253,11 +301,8 @@ class IterativePotentialCorrect(object):
 
 
     def has_converged(self):
-        merit_next = self.return_current_merit()
-
-        print('next VS current merit:', merit_next, self.merit_current)
-        relative_change = (self.merit_current - merit_next)/merit_next
-        self.merit_current = merit_next
+        relative_change = (self.merit_prev_iter - self.merit_this_iter)/self.merit_this_iter
+        print('next VS current merit:', self.merit_prev_iter, self.merit_this_iter, relative_change)
 
         # if relative_change < 1e-5:
         #     return True
@@ -266,7 +311,7 @@ class IterativePotentialCorrect(object):
         return False
 
 
-    def return_current_merit(self):
+    def return_this_iter_merit(self):
         self.mapped_reconstructed_image = np.matmul(self.Mc_matrix, self.r_vector)
         self.residual_map =  self.mapped_reconstructed_image - self._d_1d
         self.norm_residual_map = self.residual_map / self._n_1d
@@ -285,17 +330,16 @@ class IterativePotentialCorrect(object):
 
     def run_iter_solve(self):
         for ii in range(1, self._niter):
-            condition = self.solve_for_next_iteration()
-            self.visualize_iteration(niter=self.iter_count)
+            condition = self.run_this_iteration()
             if condition:
                 print('111','code converge')  
                 break
             else:
-                print('111',ii, self.iter_count)  
+                print('111',ii, self.count_iter)  
 
 
         
-    def visualize_iteration(self, basedir='./result', niter=0):
+    def visualize_iteration(self, basedir='./result', iter_num=0):
         plt.figure(figsize=(15, 10))
         percent = [0,100]
         cbpar = {}
@@ -311,6 +355,7 @@ class IterativePotentialCorrect(object):
         rgrid = np.sqrt(self.grid_obj.xgrid_data**2 + self.grid_obj.ygrid_data**2)
         limit = np.max(rgrid[~self.grid_obj.mask_data])
 
+        #--------data image
         plt.subplot(231)
         vmin = np.percentile(self.image_data,percent[0]) 
         vmax = np.percentile(self.image_data,percent[1]) 
@@ -322,13 +367,14 @@ class IterativePotentialCorrect(object):
         cb.ax.tick_params(labelsize='small')
         plt.xlim(-1.0*limit, limit)
         plt.ylim(-1.0*limit, limit)
-        plt.title(f'Data, Niter={niter}')
+        plt.title(f'Data, Niter={iter_num}')
         plt.xlabel('Arcsec')
         plt.ylabel('Arcsec')
 
+        #model reconstruction given current mass model
         mapped_reconstructed_image_2d = np.zeros_like(self.image_data)
-        self.pix_src_obj.source_inversion(self.pix_mass_current, lam_s=self.lam_s_current)
-        mapped_reconstructed_image_2d[~self.grid_obj.mask_data] = self.pix_src_obj.mapped_reconstructed_image
+        self.pix_src_obj.source_inversion(self.pix_mass_this_iter, lam_s=self.lam_s_this_iter)
+        mapped_reconstructed_image_2d[~self.grid_obj.mask_data] = np.copy(self.pix_src_obj.mapped_reconstructed_image)
         plt.subplot(232)
         vmin = np.percentile(mapped_reconstructed_image_2d,percent[0]) 
         vmax = np.percentile(mapped_reconstructed_image_2d,percent[1])
@@ -346,8 +392,9 @@ class IterativePotentialCorrect(object):
         plt.xlabel('Arcsec')
         plt.ylabel('Arcsec')
 
+        #normalized residual
         norm_residual_map_2d = np.zeros_like(self.image_data)
-        norm_residual_map_2d[~self.grid_obj.mask_data] = self.pix_src_obj.norm_residual_map
+        norm_residual_map_2d[~self.grid_obj.mask_data] = np.copy(self.pix_src_obj.norm_residual_map)
         plt.subplot(233)
         vmin = np.percentile(norm_residual_map_2d,percent[0]) 
         vmax = np.percentile(norm_residual_map_2d,percent[1])
@@ -365,14 +412,19 @@ class IterativePotentialCorrect(object):
         plt.xlabel('Arcsec')
         plt.ylabel('Arcsec')
 
+        #source image given current mass model
         plt.subplot(234)
         this_ax = plt.gca()
-        ps_plot.visualize_source(self.s_points_current, self.s_values_current, ax=this_ax)
+        ps_plot.visualize_source(
+            self.pix_src_obj.relocated_pixelization_grid,
+            self.pix_src_obj.src_recontruct,
+            ax=this_ax,
+        )
         this_ax.set_title('Source')
         plt.xlabel('Arcsec')
         plt.ylabel('Arcsec')
 
-        cumulative_psi_correct =  self.psi_2d_current - self._psi_2d_0
+        cumulative_psi_correct =  self.pix_mass_this_iter.psi_map - self._psi_2d_start
         masked_cumulative_psi_correct = np.ma.masked_array(
             cumulative_psi_correct, 
             mask=self.grid_obj.mask_data
@@ -416,5 +468,5 @@ class IterativePotentialCorrect(object):
         plt.ylabel('Arcsec')
 
         plt.tight_layout()
-        plt.savefig(f'{basedir}/{niter}.jpg', bbox_inches='tight')
+        plt.savefig(f'{basedir}/{iter_num}.jpg', bbox_inches='tight')
         plt.close()

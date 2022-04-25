@@ -38,8 +38,8 @@ class PixelizedMass(object):
             self.Hyy, self.Hxx = Hyy, Hxx
         self.hamiltonian_operator = self.Hyy + self.Hxx
 
-        self.update_alpha_kappa_from_psi_map()
-        self.update_interpolator()
+        self.alpha_kappa_map_from_psi_map()
+        self.construct_interpolator()
 
 
     def deflecton_map_from_psi_map(self):
@@ -51,12 +51,12 @@ class PixelizedMass(object):
         self.kappa_1d =  0.5 * np.matmul(self.hamiltonian_operator, self.psi_1d)
 
 
-    def update_alpha_kappa_from_psi_map(self):
+    def alpha_kappa_map_from_psi_map(self):
         self.deflecton_map_from_psi_map()
         self.convergence_map_from_psi_map()
 
 
-    def update_interpolator(self):
+    def construct_interpolator(self):
         self.interp_psi = LinearNDInterpolatorExt(self.tri, self.psi_1d)
         self.interp_alphax = LinearNDInterpolatorExt(self.tri, self.alphax_1d)
         self.interp_alphay = LinearNDInterpolatorExt(self.tri, self.alphay_1d)
