@@ -240,14 +240,16 @@ class IterativePotentialCorrect(object):
         self.update_lam_dpsi()
 
         self.Mc_RTR_matrices_from(self.pix_mass_prev_iter, self.s_points_prev_iter, self.s_values_prev_iter)
-        data_vector = self.return_data_vector()
+        self.data_vector = self.return_data_vector()
 
         #solve the next source and potential corrections
-        temp_term = np.matmul(
+        self.curve_term = np.matmul(
             np.matmul(self.Mc_matrix.T, self.inv_cov_matrix),
             self.Mc_matrix,
         )
-        self.r_vector = linalg.solve(temp_term+self.RTR_matrix, data_vector)
+        self.curve_reg_term = self.curve_term + self.RTR_matrix
+        # print('~~~~~~~~~~~~~~~~iteration-{}, r-condition number {:.5e}'.format(self.count_iter, 1/np.linalg.cond(self.curve_reg_term)))
+        self.r_vector = linalg.solve(self.curve_reg_term, self.data_vector)
 
         #extract source
         self.s_values_this_iter = self.r_vector[0:self._ns]

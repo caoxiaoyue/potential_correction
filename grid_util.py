@@ -409,6 +409,7 @@ class SparseDpsiGrid(object):
         self.get_gradient_operator_data()
         self.get_gradient_operator_dpsi()
         self.get_diff_4th_operator_dpsi()
+        self.get_diff_2nd_operator_dpsi()
         self.get_hamiltonian_operator_data()
 
 
@@ -529,6 +530,10 @@ class SparseDpsiGrid(object):
 
     def get_diff_4th_operator_dpsi(self):
         self.Hy_dpsi_4th, self.Hx_dpsi_4th = diff_4th_operator_from_mask(self.mask_dpsi, self.dpix_dpsi)
+
+
+    def get_diff_2nd_operator_dpsi(self):
+        self.Hy_dpsi_2nd, self.Hx_dpsi_2nd = diff_2nd_operator_from_mask(self.mask_dpsi, self.dpix_dpsi)
 
 
     def get_hamiltonian_operator_data(self):

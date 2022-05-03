@@ -23,7 +23,7 @@ psf = al.Kernel2D.from_gaussian(
 
 
 simulator = al.SimulatorImaging(
-    exposure_time=1200.0, psf=psf, background_sky_level=0.1, add_poisson_noise=True
+    exposure_time=1200.0, psf=psf, background_sky_level=0.1, add_poisson_noise=True, noise_seed=1
 )
 
 
@@ -36,7 +36,7 @@ lens_galaxy = al.Galaxy(
     ),
     subhalo=al.mp.SphIsothermal(
         centre=(1.15, 0.0),
-        einstein_radius=0.05,
+        einstein_radius=0.01,
     )
     # shear=al.mp.ExternalShear(elliptical_comps=(0.05, 0.05)),
 )

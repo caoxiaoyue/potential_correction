@@ -23,7 +23,7 @@
                             1.15,
                             0.0
                         ],
-                        "einstein_radius": 0.05
+                        "einstein_radius": 0.01
                     },
                     "type": "autogalaxy.galaxy.galaxy.Galaxy",
                     "redshift": 0.2,
