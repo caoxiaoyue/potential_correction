@@ -115,7 +115,7 @@ def pixel_type_from_mask(mask):
     return pixel_type
 
 
-def gradient_operator_from_mask(mask, dpix=0.05):
+def diff_1st_operator_from_mask(mask, dpix=0.05):
     """
     Receive a mask, use it to generate the gradient operator matrix Hx and Hy.
     The gradient operator matrix (Hx and Hy) has a shape of [n_unmasked_pixels, n_unmasked_pixels],
@@ -259,7 +259,7 @@ def diff_2nd_operator_from_mask(mask, dpix=0.05):
 
 def diff_4th_operator_from_mask(mask, dpix=0.05):
     """
-    Receive a mask, use it to generate the 4th differtial operator matrix Hx_4th and Hy_4th.
+    Receive a mask, use it to generate the 4th differential operator matrix Hx_4th and Hy_4th.
     """ 
     unmask = ~mask
     i_indices_unmasked, j_indices_unmasked = np.where(unmask)
@@ -373,6 +373,75 @@ def diff_4th_operator_from_mask(mask, dpix=0.05):
     return Hy, Hx
 
 
+def diff_4th_reg_operator_from_mask(mask, dpix=0.05):
+    """
+    Receive a mask, use it to generate the 4th differential operator matrix Hx_4th and Hy_4th.
+    different from the `diff_4th_operator_from_mask`, we only use the `forward differential` in this fucntion
+    """ 
+    unmask = ~mask
+    i_indices_unmasked, j_indices_unmasked = np.where(unmask)
+    indices_1d_unmasked = np.where(unmask.flatten())[0]
+    n_unmasked_pixels = len(i_indices_unmasked) 
+    Hx = np.zeros((n_unmasked_pixels, n_unmasked_pixels)) #x-direction gradient operator matrix
+    Hy = np.zeros((n_unmasked_pixels, n_unmasked_pixels)) #y-direction gradient operator matrix
+    step_y = -1.0*dpix #the minus sign is due to the y-coordinate decrease the pixel_size as index i along axis-0 increase 1.
+    step_x = 1.0*dpix #no minus, becasue the x-coordinate increase as index j along axis-1 increase.
+
+    for count in range(n_unmasked_pixels):
+        i, j = i_indices_unmasked[count], j_indices_unmasked[count]
+        #------check y-direction
+        #try 4th diff first
+        if unmask[i+1,j] and unmask[i+2,j] and unmask[i+3,j] and unmask[i+4,j]: #4th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i+1, i+2, i+3, i+4), (j, j, j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -4.0, 6.0, -4.0, 1.0])/step_y**4   
+        #if 4th diff fails, try 3th diff; Note, we don't need to try 3th central if 4th central fails
+        elif unmask[i+1,j] and unmask[i+2,j] and unmask[i+3,j]: #3th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i+1, i+2, i+3), (j, j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([-1.0, 3.0, -3.0, 1.0])/step_y**3          
+        #if 3th diff fails, try 2th diff;   
+        elif unmask[i+1,j] and unmask[i+2,j]: #2th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i+1, i+2), (j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_y**2   
+        #if 2th diff fails, try 1th diff; we don't need to try 1th central if 2th central fails
+        elif unmask[i+1,j]: #1th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i+1), (j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hy[count,indices_of_indices_1d_unmasked] = np.array([-1.0, 1.0])/step_y   
+        #if 1th fails, set the zero order drawback
+        else:
+            Hy[count,count] = 1.0 
+
+        #------check x-direction
+        #try 4th diff first
+        if unmask[i, j+1] and unmask[i, j+2] and unmask[i, j+3] and unmask[i, j+4]: #4th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i, i, i, i), (j, j+1, j+2, j+3, j+4)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -4.0, 6.0, -4.0, 1.0])/step_x**4   
+        #if 4th diff fails, try 3th diff; Note, we don't need to try 3th central if 4th central fails
+        elif unmask[i, j+1] and unmask[i, j+2] and unmask[i, j+3]: #3th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i, i, i), (j, j+1, j+2, j+3)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([-1.0, 3.0, -3.0, 1.0])/step_x**3       
+        #if 3th diff fails, try 2th diff;
+        elif unmask[i, j+1] and unmask[i, j+2]: #2th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i, i), (j, j+1, j+2)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_x**2   
+        #if 2th diff fails, try 1th diff; we don't need to try 1th central if 2th central fails
+        elif unmask[i, j+1]: #1th forward diff
+            indices_tmp = np.ravel_multi_index([(i, i), (j, j+1)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hx[count,indices_of_indices_1d_unmasked] = np.array([-1.0, 1.0])/step_x   
+        #if 1th fails, set the zero order drawback
+        else:
+            Hx[count,count] = 1.0
+
+    return Hy, Hx
+
+    
 class SparseDpsiGrid(object):
     def __init__(self, mask, dpix_data, shape_2d_dpsi=(30,30)):
         """
@@ -521,15 +590,15 @@ class SparseDpsiGrid(object):
 
 
     def get_gradient_operator_data(self):
-        self.Hy_data, self.Hx_data = gradient_operator_from_mask(self.mask_data, self.dpix_data)
+        self.Hy_data, self.Hx_data = diff_1st_operator_from_mask(self.mask_data, self.dpix_data)
 
 
     def get_gradient_operator_dpsi(self):
-        self.Hy_dpsi, self.Hx_dpsi = gradient_operator_from_mask(self.mask_dpsi, self.dpix_dpsi)
+        self.Hy_dpsi, self.Hx_dpsi = diff_1st_operator_from_mask(self.mask_dpsi, self.dpix_dpsi)
 
 
     def get_diff_4th_operator_dpsi(self):
-        self.Hy_dpsi_4th, self.Hx_dpsi_4th = diff_4th_operator_from_mask(self.mask_dpsi, self.dpix_dpsi)
+        self.Hy_dpsi_4th, self.Hx_dpsi_4th = diff_4th_reg_operator_from_mask(self.mask_dpsi, self.dpix_dpsi)
 
 
     def get_diff_2nd_operator_dpsi(self):
@@ -542,238 +611,5 @@ class SparseDpsiGrid(object):
 
 
 if __name__ == '__main__':
-    """
-    #An regular grid test
-    grid_data = al.Grid2D.uniform(shape_native=(20,20), pixel_scales=0.1, sub_size=1)
-    xgrid_data = grid_data.native[:,:,1]
-    ygrid_data = grid_data.native[:,:,0]
-    rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
-    annular_mask = np.logical_or(rgrid<0.3, rgrid>0.7)
-    grid_obj = SparseDpsiGrid(annular_mask, 0.1, shape_2d_dpsi=(10,10))
-    grid_obj.show_grid()
-    """
-
-    """
-    #More irregular mask, test mask clean method for both data and dpsi grid
-    grid_data = al.Grid2D.uniform(shape_native=(20,20), pixel_scales=0.1, sub_size=1)
-    xgrid_data = grid_data.native[:,:,1]
-    ygrid_data = grid_data.native[:,:,0]
-    rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
-    annular_mask = np.logical_or(rgrid<0.3, rgrid>0.7)
-    grid_obj = SparseDpsiGrid(annular_mask, 0.1, shape_2d_dpsi=(12,12))
-    grid_obj.show_grid()
-    np.savetxt('mask_data.txt', grid_obj.mask, fmt='%.0f')  #This file will modified manually to generate a more irrgular mask
-    """
-
-    """
-    #Write file for pytest
-    mask = np.loadtxt('test/data/mask_data.txt').astype('bool')
-    grid_obj = SparseDpsiGrid(mask, 0.1, shape_2d_dpsi=(12,12))
-    grid_obj.show_grid()
-    #save info for test
-    np.savetxt('mask_dpsi.txt', grid_obj.mask_dpsi, fmt='%.0f')
-    np.savetxt('indices_1d_dpsi.txt', grid_obj.indices_1d_dpsi, fmt='%.0f')
-    np.savetxt('xgrid_dpsi_1d.txt', grid_obj.xgrid_dpsi_1d, fmt='%.12f')
-    np.savetxt('ygrid_dpsi_1d.txt', grid_obj.ygrid_dpsi_1d, fmt='%.12f')
-    np.savetxt('mask_data.txt', grid_obj.mask_data, fmt='%.0f')
-    np.savetxt('indices_1d_data.txt', grid_obj.indices_1d_data, fmt='%.0f')   
-    np.savetxt('xgrid_data_1d.txt', grid_obj.xgrid_data_1d, fmt='%.12f')
-    np.savetxt('ygrid_data_1d.txt', grid_obj.ygrid_data_1d, fmt='%.12f')
-    np.savetxt('sparse_box_xcenter.txt', grid_obj.sparse_box_xcenter, fmt='%.12f')
-    np.savetxt('sparse_box_ycenter.txt', grid_obj.sparse_box_ycenter, fmt='%.12f')
-    np.savetxt('mask_sparse_box.txt', grid_obj.mask_sparse_box, fmt='%.0f')
-    np.savetxt('indices_1d_sparse_box.txt', grid_obj.indices_1d_sparse_box, fmt='%.0f')
-    np.savetxt('sparse_box_xcenter_1d.txt', grid_obj.sparse_box_xcenter_1d, fmt='%.12f')
-    np.savetxt('sparse_box_ycenter_1d.txt', grid_obj.sparse_box_ycenter_1d, fmt='%.12f')
-    """
-    
-    """
-    #fix map_matrix bug
-    grid_data = al.Grid2D.uniform(shape_native=(10,10), pixel_scales=0.1, sub_size=1)
-    xgrid_data = grid_data.native[:,:,1]
-    ygrid_data = grid_data.native[:,:,0]
-    rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
-    mask = (rgrid>0.25)
-    grid_obj = SparseDpsiGrid(mask, 0.1, shape_2d_dpsi=(10,10))
-    grid_obj.show_grid()
-
-    print(grid_obj.xgrid_data_1d[2], grid_obj.ygrid_data_1d[2], '---(x,y) data position')
-    print(grid_obj.indices_1d_data[2], '---data indices', np.unravel_index(grid_obj.indices_1d_data[2], grid_obj.mask_data.shape))
-    print(grid_obj.data_dpsi_pair_info[2,:,:], 'indices and weight') #[top-left,top-right, bottom-left, bottom-right]
-
-    paired_dpsi_1d_indices =  grid_obj.indices_1d_dpsi[(grid_obj.data_dpsi_pair_info[2,0,:]).astype('int64')]
-    print([np.unravel_index(item, grid_obj.shape_2d_dpsi) for item in paired_dpsi_1d_indices], '2d paried dpsi indices')
-    print('map matrix first data pixel row')
-    print(grid_obj.map_matrix[2,:])
-
-    def test_func(xgrid, ygrid):
-        return 2*xgrid + 3*ygrid
-
-    data_image2d_true = test_func(grid_obj.xgrid_data, grid_obj.ygrid_data)
-    dpsi_image2d_true = test_func(grid_obj.xgrid_dpsi, grid_obj.ygrid_dpsi)
-    data_image1d_true = test_func(grid_obj.xgrid_data_1d, grid_obj.ygrid_data_1d)
-    dpsi_image1d_true = test_func(grid_obj.xgrid_dpsi_1d, grid_obj.ygrid_dpsi_1d)
-
-    data_image1d_map = np.matmul(grid_obj.map_matrix, dpsi_image1d_true) #this value is wrong
-
-    print('--------data_image1d_map', data_image1d_map)
-    print('--------data_image1d_true', data_image1d_true)
-    with open('test/data/data_dpsi_pair_info.pkl','wb') as f:
-        pickle.dump(grid_obj.data_dpsi_pair_info,f)
-    """
-
-
-    """
-    #test data-dpsi pairing
-    grid_data = al.Grid2D.uniform(shape_native=(100,100), pixel_scales=0.1, sub_size=1)
-    xgrid_data = grid_data.native[:,:,1]
-    ygrid_data = grid_data.native[:,:,0]
-    rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
-    annular_mask = (rgrid>4.0) #np.logical_or(rgrid<1.0, rgrid>4.0)
-    grid_obj = SparseDpsiGrid(annular_mask, 0.1, shape_2d_dpsi=(50,50))
-    grid_obj.show_grid()
-
-    def test_func(xgrid, ygrid):
-        return 2*xgrid + 3*ygrid
-
-    data_image2d_true = test_func(grid_obj.xgrid_data, grid_obj.ygrid_data)
-    dpsi_image2d_true = test_func(grid_obj.xgrid_dpsi, grid_obj.ygrid_dpsi)
-    data_image1d_true = test_func(grid_obj.xgrid_data_1d, grid_obj.ygrid_data_1d)
-    dpsi_image1d_true = test_func(grid_obj.xgrid_dpsi_1d, grid_obj.ygrid_dpsi_1d)
-
-    data_image2d_recover = np.zeros_like(data_image2d_true)
-    data_image2d_recover.reshape(-1)[grid_obj.indices_1d_data] = data_image1d_true[:] #should not use flatten() here!!!
-    dpsi_image2d_recover = np.zeros_like(dpsi_image2d_true)
-    dpsi_image2d_recover.reshape(-1)[grid_obj.indices_1d_dpsi] = dpsi_image1d_true[:]
-
-    data_image1d_map = np.matmul(grid_obj.map_matrix, dpsi_image1d_true) 
-    data_image2d_map = np.zeros_like(data_image2d_true)
-    data_image2d_map.reshape(-1)[grid_obj.indices_1d_data] = data_image1d_map[:]
-
-    plt.figure(figsize=(10,15))
-    plt.subplot(321)
-    plt.imshow(data_image2d_true, extent=grid_obj.image_bound)
-    plt.colorbar(fraction=0.046, pad=0.04)
-    plt.subplot(322)
-    plt.imshow(dpsi_image2d_true, extent=grid_obj.image_bound)
-    plt.colorbar(fraction=0.046, pad=0.04)
-    plt.subplot(323)
-    plt.imshow(data_image2d_recover, extent=grid_obj.image_bound)
-    plt.colorbar(fraction=0.046, pad=0.04)
-    plt.subplot(324)
-    plt.imshow(dpsi_image2d_recover, extent=grid_obj.image_bound)
-    plt.colorbar(fraction=0.046, pad=0.04)
-    plt.subplot(325)
-    plt.imshow(data_image2d_map, extent=grid_obj.image_bound)
-    plt.colorbar(fraction=0.046, pad=0.04)
-    plt.subplot(326)
-    plt.imshow(data_image2d_map-data_image2d_recover, extent=grid_obj.image_bound)
-    plt.colorbar(fraction=0.046, pad=0.04)
-    plt.savefig('itp_image.png')
-    plt.close()
-    """
-
-    """
-    #test unmasked pixel type
-    grid_data = al.Grid2D.uniform(shape_native=(10,10), pixel_scales=0.1, sub_size=1)
-    xgrid_data = grid_data.native[:,:,1]
-    ygrid_data = grid_data.native[:,:,0]
-    rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
-    mask = (rgrid>0.25)
-    mask[3,6] = True
-    grid_obj = SparseDpsiGrid(mask, 0.1, shape_2d_dpsi=(5,5))
-    grid_obj.show_grid()
-
-    pixel_type_data = pixel_type_from_mask(grid_obj.mask_data)
-    pixel_type_dpsi = pixel_type_from_mask(grid_obj.mask_dpsi)
-    print(pixel_type_data)
-    print('------------')
-    print(pixel_type_dpsi)
-    np.savetxt('test/data/pixel_type_data.txt', pixel_type_data, fmt='%.0f')
-    np.savetxt('test/data/pixel_type_dpsi.txt', pixel_type_dpsi, fmt='%.0f')
-    """
-
-    """
-    #test gradient operator matrix Hx Hy
-    grid_data = al.Grid2D.uniform(shape_native=(100,100), pixel_scales=0.1, sub_size=1)
-    xgrid_data = grid_data.native[:,:,1]
-    ygrid_data = grid_data.native[:,:,0]
-    rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
-    annular_mask = (rgrid>4.0) #np.logical_or(rgrid<1.0, rgrid>4.0)
-    grid_obj = SparseDpsiGrid(annular_mask, 0.1, shape_2d_dpsi=(50,50))
-
-    def linear_func(xgrid, ygrid):
-        return 2*xgrid + 3*ygrid + 1
-
-    data_image1d_true = linear_func(grid_obj.xgrid_data_1d, grid_obj.ygrid_data_1d)
-    Hy, Hx = gradient_operator_from_mask(grid_obj.mask_data, grid_obj.dpix_data)
-    y_gradient = np.matmul(Hy, data_image1d_true)
-    x_gradient = np.matmul(Hx, data_image1d_true)
-
-    assert np.isclose(y_gradient, 3, rtol=1e-05, atol=1e-08, equal_nan=False).all()
-    assert np.isclose(x_gradient, 2, rtol=1e-05, atol=1e-08, equal_nan=False).all()
-    """
-
-    """
-    #test gradient operator matrix Hx Hy in SparseDpsiGrid class
-    grid_data = al.Grid2D.uniform(shape_native=(100,100), pixel_scales=0.1, sub_size=1)
-    xgrid_data = grid_data.native[:,:,1]
-    ygrid_data = grid_data.native[:,:,0]
-    rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
-    annular_mask = (rgrid>4.0) #np.logical_or(rgrid<1.0, rgrid>4.0)
-    grid_obj = SparseDpsiGrid(annular_mask, 0.1, shape_2d_dpsi=(50,50))
-
-    def linear_func(xgrid, ygrid):
-        return 2*xgrid + 3*ygrid + 1
-
-    data_image1d_true = linear_func(grid_obj.xgrid_data_1d, grid_obj.ygrid_data_1d)
-    y_gradient_data = np.matmul(grid_obj.Hy_data, data_image1d_true)
-    x_gradient_data = np.matmul(grid_obj.Hx_data, data_image1d_true)
-
-    dpsi_image1d_true = linear_func(grid_obj.xgrid_dpsi_1d, grid_obj.ygrid_dpsi_1d)
-    y_gradient_dpsi = np.matmul(grid_obj.Hy_dpsi, dpsi_image1d_true)
-    x_gradient_dpsi = np.matmul(grid_obj.Hx_dpsi, dpsi_image1d_true)
-
-    assert np.isclose(y_gradient_data, 3, rtol=1e-05, atol=1e-08, equal_nan=False).all()
-    assert np.isclose(x_gradient_data, 2, rtol=1e-05, atol=1e-08, equal_nan=False).all()
-    assert np.isclose(y_gradient_dpsi, 3, rtol=1e-05, atol=1e-08, equal_nan=False).all()
-    assert np.isclose(x_gradient_dpsi, 2, rtol=1e-05, atol=1e-08, equal_nan=False).all()
-    """
-    
-
-    #test 4th diff operator matrix Hx Hy in SparseDpsiGrid class
-    grid_data = al.Grid2D.uniform(shape_native=(20,20), pixel_scales=1.0, sub_size=1)
-    xgrid_data = grid_data.native[:,:,1]
-    ygrid_data = grid_data.native[:,:,0]
-    rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
-    annular_mask = (rgrid>5.0) #np.logical_or(rgrid<1.0, rgrid>4.0)
-    grid_obj = SparseDpsiGrid(annular_mask, 1.0, shape_2d_dpsi=(10,10))
-    grid_obj.show_grid()
-
-    def test_func(xgrid, ygrid):
-        return xgrid**4 + 2*ygrid**4 + 1
-
-    dpsi_image1d_true = test_func(grid_obj.xgrid_dpsi_1d, grid_obj.ygrid_dpsi_1d)
-    y_diff_4th_dpsi_1d = np.matmul(grid_obj.Hy_dpsi_4th, dpsi_image1d_true)
-    x_diff_4th_dpsi_1d = np.matmul(grid_obj.Hx_dpsi_4th, dpsi_image1d_true)
-
-    y_diff_4th_dpsi_2d = np.zeros_like(grid_obj.xgrid_dpsi)
-    y_diff_4th_dpsi_2d[~grid_obj.mask_dpsi] = y_diff_4th_dpsi_1d
-
-    x_diff_4th_dpsi_2d = np.zeros_like(grid_obj.xgrid_dpsi)
-    x_diff_4th_dpsi_2d[~grid_obj.mask_dpsi] = x_diff_4th_dpsi_1d
-
-    np.savetxt('test/data/Hy_dpsi_4th.txt', grid_obj.Hy_dpsi_4th, fmt='%.6f')
-    np.savetxt('test/data/Hx_dpsi_4th.txt', grid_obj.Hx_dpsi_4th, fmt='%.6f')
-
-
-    plt.figure(figsize=(10,10))
-    plt.subplot(221)
-    plt.imshow(y_diff_4th_dpsi_2d, extent=grid_obj.image_bound)
-    plt.colorbar(fraction=0.046, pad=0.04)
-    plt.subplot(222)
-    plt.imshow(x_diff_4th_dpsi_2d, extent=grid_obj.image_bound)
-    plt.colorbar(fraction=0.046, pad=0.04)
-    plt.savefig('diff_4th_image.png')
-    plt.close()
+    pass
     

@@ -28,7 +28,7 @@ class PixelizedMass(object):
         self.tri = Delaunay(list(zip(self.xgrid_1d, self.ygrid_1d)))
         
         if (Hx is None) or (Hy is None):
-            self.Hy, self.Hx = grid_util.gradient_operator_from_mask(self.mask, self.dpix)
+            self.Hy, self.Hx = grid_util.diff_1st_operator_from_mask(self.mask, self.dpix)
         else:
             self.Hy, self.Hx = Hy, Hx
 

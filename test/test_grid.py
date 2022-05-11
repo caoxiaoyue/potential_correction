@@ -82,7 +82,7 @@ def test_gradient_operator_from_mask():
         return 2*xgrid + 3*ygrid + 1
 
     data_image1d_true = linear_func(grid_obj.xgrid_data_1d, grid_obj.ygrid_data_1d)
-    Hy, Hx = grid_util.gradient_operator_from_mask(grid_obj.mask_data, grid_obj.dpix_data)
+    Hy, Hx = grid_util.diff_1st_operator_from_mask(grid_obj.mask_data, grid_obj.dpix_data)
     y_gradient = np.matmul(Hy, data_image1d_true)
     x_gradient = np.matmul(Hx, data_image1d_true)
 
@@ -215,12 +215,12 @@ class TestSparseDpsiGrid:
 
     
     def test_diff_4th_dpsi_operator(self):
-        grid_data = al.Grid2D.uniform(shape_native=(20,20), pixel_scales=1.0, sub_size=1)
+        grid_data = al.Grid2D.uniform(shape_native=(20,20), pixel_scales=0.5, sub_size=1)
         xgrid_data = grid_data.native[:,:,1]
         ygrid_data = grid_data.native[:,:,0]
         rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
-        annular_mask = (rgrid>5.0) #np.logical_or(rgrid<1.0, rgrid>4.0)
-        grid_obj = grid_util.SparseDpsiGrid(annular_mask, 1.0, shape_2d_dpsi=(10,10))
+        annular_mask = np.logical_or(rgrid<1.5, rgrid>4.0)
+        grid_obj = grid_util.SparseDpsiGrid(annular_mask, 0.5, shape_2d_dpsi=(10,10))
 
         true_Hy_dpsi_4th = np.loadtxt(f'{current_dir}/data/grid/Hy_dpsi_4th.txt')
         true_Hx_dpsi_4th = np.loadtxt(f'{current_dir}/data/grid/Hx_dpsi_4th.txt')
