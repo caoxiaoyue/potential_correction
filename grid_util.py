@@ -626,9 +626,10 @@ class SparseDpsiGrid(object):
         self.get_dpsi2data_mapping()
         self.get_gradient_operator_data()
         self.get_gradient_operator_dpsi()
-        self.get_diff_4th_operator_dpsi()
         self.get_diff_2nd_operator_dpsi()
         self.get_hamiltonian_operator_data()
+        self.get_diff_4th_reg_operator_dpsi()
+        self.get_diff_2nd_reg_operator_dpsi()
 
 
     def mask_dpsi_from_data(self):
@@ -746,12 +747,16 @@ class SparseDpsiGrid(object):
         self.Hy_dpsi, self.Hx_dpsi = diff_1st_operator_from_mask(self.mask_dpsi, self.dpix_dpsi)
 
 
-    def get_diff_4th_operator_dpsi(self):
-        self.Hy_dpsi_4th, self.Hx_dpsi_4th = diff_4th_reg_operator_from_mask(self.mask_dpsi, self.dpix_dpsi)
+    def get_diff_4th_reg_operator_dpsi(self):
+        self.Hy_dpsi_4th_reg, self.Hx_dpsi_4th_reg = diff_4th_reg_nopad_operator_from_mask(self.mask_dpsi, 1) #for reg matrix, set dpix to 1
 
 
     def get_diff_2nd_operator_dpsi(self):
         self.Hy_dpsi_2nd, self.Hx_dpsi_2nd = diff_2nd_operator_from_mask(self.mask_dpsi, self.dpix_dpsi)
+
+
+    def get_diff_2nd_reg_operator_dpsi(self):
+        self.Hy_dpsi_2nd_reg, self.Hx_dpsi_2nd_reg = diff_2nd_reg_nopad_operator_from_mask(self.mask_dpsi, 1) #for reg matrix, set dpix to 1, to be consistent to suyu06 eq.A.3
 
 
     def get_hamiltonian_operator_data(self):

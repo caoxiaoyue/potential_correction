@@ -39,18 +39,22 @@ class IterativePotentialCorrect(object):
         niter=100, 
         lam_s_start=None, 
         lam_dpsi_start=1e9,
+        lam_dpsi_type='4th',
         psi_anchor_points=None,
         check_converge_points=None,
+        subhalo_fiducial_point=None,
     ):
         """
         psi_2d_0: the lens potential map of the initial start mass model, typicall given by a macro model like elliptical power law model.
         niter: the upper limit of the number of the potential correctio iterations
         lam_s_0: the initial regularization strength of pixelized sources. 
         lam_dpsi_0: the initial regularization strength of potential correction (dpsi)
+        lam_dpsi_type: the regularization type of dpsi
         psi_anchor_points: the anchor points of lens potential. we require the lens potential values at those anchor point
         remain unchanged during potential corrention, to avoid various degeneracy problems. (see sec.2.3 in our document);
         dpsi_anchor_points has the following form: [(y1,x1), (y2,x2), (y3,x3)]
         check_converge_points: the points where we check convergence, in autolens [(y1,x1), (y2,x2), (y3,x3), ...] order
+        subhalo_fiducial_point: the fiducial location of subhalo, (y_sub, x_sub), mainly for mock test purpose.
         """
         self._niter = niter
         self._lam_s_start = lam_s_start
@@ -89,6 +93,7 @@ class IterativePotentialCorrect(object):
 
         #Init other auxiliary info
         self._psi_anchor_values = self.pix_mass_this_iter.eval_psi_at(self._psi_anchor_points)
+        self._subhalo_fiducial_point = subhalo_fiducial_point
         self.pix_src_obj.inverse_covariance_matrix()
         self._inv_cov_matrix =  np.copy(self.pix_src_obj.inv_cov_mat) #inverse covariance matrix
         self._ns = len(self.s_values_this_iter) #number source grids
@@ -104,8 +109,12 @@ class IterativePotentialCorrect(object):
             self.grid_obj.Hy_dpsi
         ) #the potential correction gradient operator, see the eq.8 in our document
         self._dpsi_grid_points = np.vstack([self.grid_obj.ygrid_dpsi_1d, self.grid_obj.xgrid_dpsi_1d]).T #points of sparse potential correction grid
-        self._HTH_dpsi = np.matmul(self.grid_obj.Hx_dpsi_4th.T, self.grid_obj.Hx_dpsi_4th) + \
-            np.matmul(self.grid_obj.Hy_dpsi_4th.T, self.grid_obj.Hy_dpsi_4th)
+        if lam_dpsi_type == '4th':
+            self._HTH_dpsi = np.matmul(self.grid_obj.Hx_dpsi_4th_reg.T, self.grid_obj.Hx_dpsi_4th_reg) + \
+                np.matmul(self.grid_obj.Hy_dpsi_4th_reg.T, self.grid_obj.Hy_dpsi_4th_reg)
+        elif lam_dpsi_type == '2nd':
+            self._HTH_dpsi = np.matmul(self.grid_obj.Hx_dpsi_2nd_reg.T, self.grid_obj.Hx_dpsi_2nd_reg) + \
+                np.matmul(self.grid_obj.Hy_dpsi_2nd_reg.T, self.grid_obj.Hy_dpsi_2nd_reg)            
         
         #visualize iteration-0
         self.visualize_iteration(iter_num=self.count_iter)
@@ -432,6 +441,7 @@ class IterativePotentialCorrect(object):
         vmax = None #np.percentile(self.dkappa_accum,percent[1]) 
         plt.imshow(masked_cumulative_kappa_correct,vmin=vmin,vmax=vmax,**myargs)
         plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
+        plt.plot(self._subhalo_fiducial_point[1], self._subhalo_fiducial_point[0], 'k*', ms=markersize)
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
         cb.ax.tick_params(labelsize='small')

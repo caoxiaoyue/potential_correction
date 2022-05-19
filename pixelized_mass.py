@@ -21,6 +21,7 @@ class PixelizedMass(object):
         self.psi_map = psi_map
         self.mask = mask
         self.dpix = np.abs(xgrid[0,1] - xgrid[0,0])
+        self.psi_map[self.mask] = 0.0 #always ensure the psi values in masked region are 0
 
         self.psi_1d = self.psi_map[~self.mask]
         self.xgrid_1d = self.xgrid[~self.mask]
