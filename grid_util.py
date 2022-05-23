@@ -115,7 +115,7 @@ def pixel_type_from_mask(mask):
     return pixel_type
 
 
-def diff_1st_operator_from_mask(mask, dpix=0.05):
+def diff_1st_operator_from_mask(mask, dpix=1.0):
     """
     Receive a mask, use it to generate the gradient operator matrix Hx and Hy.
     The gradient operator matrix (Hx and Hy) has a shape of [n_unmasked_pixels, n_unmasked_pixels],
@@ -200,7 +200,7 @@ def diff_1st_operator_from_mask(mask, dpix=0.05):
     return Hy, Hx
 
 
-def diff_2nd_operator_from_mask(mask, dpix=0.05):
+def diff_2nd_operator_from_mask(mask, dpix=1.0):
     """
     Receive a mask, use it to generate the 2nd differential operator matrix Hxx and Hyy.
     Hxx (Hyy) has a shape of [n_unmasked_pixels, n_unmasked_pixels],
@@ -257,7 +257,7 @@ def diff_2nd_operator_from_mask(mask, dpix=0.05):
     return Hyy, Hxx
 
 
-def diff_2nd_reg_operator_from_mask(mask, dpix=0.05):
+def diff_2nd_reg_operator_from_mask(mask, dpix=1.0):
     """
     Receive a mask, use it to generate the 2nd differential operator matrix Hxx and Hyy.
     Hxx (Hyy) has a shape of [n_unmasked_pixels, n_unmasked_pixels],
@@ -307,7 +307,7 @@ def diff_2nd_reg_operator_from_mask(mask, dpix=0.05):
     return Hyy, Hxx
 
 
-def diff_2nd_reg_nopad_operator_from_mask(mask, dpix=0.05):
+def diff_2nd_reg_nopad_operator_from_mask(mask, dpix=1.0):
     """
     Receive a mask, use it to generate the 2nd differential operator matrix Hxx and Hyy.
     Hxx (Hyy) has a shape of [n_unmasked_pixels, n_unmasked_pixels],
@@ -347,7 +347,7 @@ def diff_2nd_reg_nopad_operator_from_mask(mask, dpix=0.05):
     return Hyy, Hxx
 
 
-def diff_4th_operator_from_mask(mask, dpix=0.05):
+def diff_4th_operator_from_mask(mask, dpix=1.0):
     """
     Receive a mask, use it to generate the 4th differential operator matrix Hx_4th and Hy_4th.
     """ 
@@ -463,7 +463,7 @@ def diff_4th_operator_from_mask(mask, dpix=0.05):
     return Hy, Hx
 
 
-def diff_4th_reg_operator_from_mask(mask, dpix=0.05):
+def diff_4th_reg_operator_from_mask(mask, dpix=1.0):
     """
     Receive a mask, use it to generate the 4th differential operator matrix Hx_4th and Hy_4th.
     different from the `diff_4th_operator_from_mask`, we only use the `forward differential` in this fucntion
@@ -532,7 +532,7 @@ def diff_4th_reg_operator_from_mask(mask, dpix=0.05):
     return Hy, Hx
 
 
-def diff_4th_reg_nopad_operator_from_mask(mask, dpix=0.05):
+def diff_4th_reg_nopad_operator_from_mask(mask, dpix=1.0):
     """
     Receive a mask, use it to generate the 4th differential operator matrix Hx_4th and Hy_4th.
     different from the `diff_4th_operator_from_mask`, we only use the `forward differential` in this fucntion
@@ -748,7 +748,7 @@ class SparseDpsiGrid(object):
 
 
     def get_diff_4th_reg_operator_dpsi(self):
-        self.Hy_dpsi_4th_reg, self.Hx_dpsi_4th_reg = diff_4th_reg_nopad_operator_from_mask(self.mask_dpsi, 1) #for reg matrix, set dpix to 1
+        self.Hy_dpsi_4th_reg, self.Hx_dpsi_4th_reg = diff_4th_reg_nopad_operator_from_mask(self.mask_dpsi) #for reg matrix, set dpix to 1
 
 
     def get_diff_2nd_operator_dpsi(self):
@@ -756,7 +756,7 @@ class SparseDpsiGrid(object):
 
 
     def get_diff_2nd_reg_operator_dpsi(self):
-        self.Hy_dpsi_2nd_reg, self.Hx_dpsi_2nd_reg = diff_2nd_reg_nopad_operator_from_mask(self.mask_dpsi, 1) #for reg matrix, set dpix to 1, to be consistent to suyu06 eq.A.3
+        self.Hy_dpsi_2nd_reg, self.Hx_dpsi_2nd_reg = diff_2nd_reg_nopad_operator_from_mask(self.mask_dpsi) #for reg matrix, set dpix to 1, to be consistent to suyu06 eq.A.3
 
 
     def get_hamiltonian_operator_data(self):

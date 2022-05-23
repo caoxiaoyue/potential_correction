@@ -222,8 +222,23 @@ class TestSparseDpsiGrid:
         annular_mask = np.logical_or(rgrid<1.5, rgrid>4.0)
         grid_obj = grid_util.SparseDpsiGrid(annular_mask, 0.5, shape_2d_dpsi=(10,10))
 
-        true_Hy_dpsi_4th = np.loadtxt(f'{current_dir}/data/grid/Hy_dpsi_4th.txt')
-        true_Hx_dpsi_4th = np.loadtxt(f'{current_dir}/data/grid/Hx_dpsi_4th.txt')
+        true_Hy_dpsi_4th = np.loadtxt(f'{current_dir}/data/grid/Hy_dpsi_4th_reg.txt')
+        true_Hx_dpsi_4th = np.loadtxt(f'{current_dir}/data/grid/Hx_dpsi_4th_reg.txt')
 
-        assert np.isclose(grid_obj.Hy_dpsi_4th, true_Hy_dpsi_4th, rtol=1e-05, atol=1e-08, equal_nan=False).all()
-        assert np.isclose(grid_obj.Hx_dpsi_4th, true_Hx_dpsi_4th, rtol=1e-05, atol=1e-08, equal_nan=False).all()   
+        assert np.isclose(grid_obj.Hy_dpsi_4th_reg, true_Hy_dpsi_4th, rtol=1e-05, atol=1e-08, equal_nan=False).all()
+        assert np.isclose(grid_obj.Hx_dpsi_4th_reg, true_Hx_dpsi_4th, rtol=1e-05, atol=1e-08, equal_nan=False).all()   
+
+
+    def test_diff_2nd_dpsi_operator(self):
+        grid_data = al.Grid2D.uniform(shape_native=(20,20), pixel_scales=0.5, sub_size=1)
+        xgrid_data = grid_data.native[:,:,1]
+        ygrid_data = grid_data.native[:,:,0]
+        rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
+        annular_mask = np.logical_or(rgrid<1.5, rgrid>4.0)
+        grid_obj = grid_util.SparseDpsiGrid(annular_mask, 0.5, shape_2d_dpsi=(10,10))
+
+        true_Hy_dpsi_2nd = np.loadtxt(f'{current_dir}/data/grid/Hy_dpsi_2nd_reg.txt')
+        true_Hx_dpsi_2nd = np.loadtxt(f'{current_dir}/data/grid/Hx_dpsi_2nd_reg.txt')
+
+        assert np.isclose(grid_obj.Hy_dpsi_2nd_reg, true_Hy_dpsi_2nd, rtol=1e-05, atol=1e-08, equal_nan=False).all()
+        assert np.isclose(grid_obj.Hx_dpsi_2nd_reg, true_Hx_dpsi_2nd, rtol=1e-05, atol=1e-08, equal_nan=False).all()   
