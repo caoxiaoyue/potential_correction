@@ -1,3 +1,4 @@
+#%%
 from os import path
 import autolens as al
 import autolens.plot as aplt
@@ -85,6 +86,34 @@ imaging.output_to_fits(
     noise_map_path=path.join(dataset_path, "noise_map.fits"),
     overwrite=True,
 )
+ 
+
+#%%
+import pickle
+from matplotlib import pyplot as plt 
+import numpy as np
+mask_data = al.Mask2D.circular_annular(
+    shape_native=imaging.shape_native, 
+    pixel_scales=imaging.pixel_scales[0], 
+    inner_radius=1.2*(1-0.4), 
+    outer_radius=1.2*(1+0.4),
+)
+masked_imaging = imaging.apply_mask(mask=mask_data)
+
+solver = al.PointSolver(
+    grid=grid, use_upscaling=True, pixel_scale_precision=0.001, upscale_factor=2
+)
+positions = solver.solve(
+    lensing_obj=tracer, source_plane_coordinate=source_galaxy.bulge.centre
+)
+with open(f'./lens_sie_subhalo_nfw_src_sersic_1.pkl','wb') as f:
+    lens_data = {
+        'masked_imaging': masked_imaging,
+        'mask': np.asarray(masked_imaging.mask),
+        'positions': positions,
+    }
+    pickle.dump(lens_data, f)
+
 
 """
 Output a subplot of the simulated dataset, the image and a subplot of the `Tracer`'s quantities to the dataset path 
@@ -92,21 +121,23 @@ as .png files.
 """
 mat_plot_2d = aplt.MatPlot2D(output=aplt.Output(path=dataset_path, format="png"))
 
-imaging_plotter = aplt.ImagingPlotter(imaging=imaging, mat_plot_2d=mat_plot_2d)
+imaging_plotter = aplt.ImagingPlotter(imaging=masked_imaging, mat_plot_2d=mat_plot_2d)
 imaging_plotter.subplot_imaging()
 imaging_plotter.figures_2d(image=True)
 
-tracer_plotter = aplt.TracerPlotter(tracer=tracer, grid=grid, mat_plot_2d=mat_plot_2d)
-tracer_plotter.subplot_tracer()
+# tracer_plotter = aplt.TracerPlotter(tracer=tracer, grid=grid, mat_plot_2d=mat_plot_2d)
+# tracer_plotter.subplot_tracer()
 
-"""
-Pickle the `Tracer` in the dataset folder, ensuring the true `Tracer` is safely stored and available if we need to 
-check how the dataset was simulated in the future. 
+# """
+# Pickle the `Tracer` in the dataset folder, ensuring the true `Tracer` is safely stored and available if we need to 
+# check how the dataset was simulated in the future. 
 
-This will also be accessible via the `Aggregator` if a model-fit is performed using the dataset.
-"""
-tracer.output_to_json(file_path=path.join(dataset_path, "tracer.json"))
+# This will also be accessible via the `Aggregator` if a model-fit is performed using the dataset.
+# """
+# tracer.output_to_json(file_path=path.join(dataset_path, "tracer.json"))
 
-"""
-The dataset can be viewed in the folder `autolens_workspace/imaging/no_lens_light/mass_sie__source_sersic`.
-"""
+# """
+# The dataset can be viewed in the folder `autolens_workspace/imaging/no_lens_light/mass_sie__source_sersic`.
+# """
+
+# %%
