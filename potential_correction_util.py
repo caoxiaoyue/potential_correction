@@ -115,7 +115,7 @@ def solve_psi_rescale_factor(fix_psi_values, fix_points, psi_new):
     return a_y, a_x, c
 
 
-def rescale_psi_map(psi_anchor_values, psi_anchor_points, psi_new, psi_map_new, xgrid, ygrid):
+def rescale_psi_map(psi_anchor_values, psi_anchor_points, psi_new, psi_map_new, xgrid, ygrid, return_rescale_factor=False):
     """
     rescale the psi_new potential according to psi_init
     see eq.22 and chapter-2.3 in our document
@@ -131,7 +131,11 @@ def rescale_psi_map(psi_anchor_values, psi_anchor_points, psi_new, psi_map_new, 
         array: the rescaled lensing potential map
     """
     a_y, a_x, c = solve_psi_rescale_factor(psi_anchor_values, psi_anchor_points, psi_new)
-    return a_x*xgrid + a_y*ygrid + c + psi_map_new
+
+    if return_rescale_factor:
+        return a_x*xgrid + a_y*ygrid + c + psi_map_new, (a_y, a_x, c)
+    else:
+        return a_x*xgrid + a_y*ygrid + c + psi_map_new
 
 
 class LinearNDInterpolatorExt(object):

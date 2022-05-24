@@ -275,16 +275,23 @@ class IterativePotentialCorrect(object):
         psi_interpolator = LinearNDInterpolatorExt(self.tri_psi_interp, psi_2d_in[~self.grid_obj.mask_data])
         
         psi_anchor_values_new = psi_interpolator(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0])
-        psi_2d_out = pcu.rescale_psi_map(
+        psi_2d_out, factor = pcu.rescale_psi_map(
             self._psi_anchor_values, 
             self._psi_anchor_points, 
             psi_anchor_values_new, 
             psi_2d_in, 
             self.grid_obj.xgrid_data, 
             self.grid_obj.ygrid_data,
+            return_rescale_factor=True,
         )
         psi_2d_out[self.grid_obj.mask_data] = 0.0 #always set lens potential values at masked region to 0.0
 
+        # #check psi rescaling-----------
+        # psi_interpolator_check = LinearNDInterpolatorExt(self.tri_psi_interp, psi_2d_out[~self.grid_obj.mask_data])
+        # psi_anchor_values_check = psi_interpolator_check(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0])
+        # print('diff_origin', psi_anchor_values_new-self._psi_anchor_values)
+        # print(self._psi_anchor_values,'psi rescaling check',psi_anchor_values_check, 'diff_rescale', psi_anchor_values_check-self._psi_anchor_values)
+        # print('rescale factor', factor)
         return psi_2d_out
 
 
@@ -306,6 +313,7 @@ class IterativePotentialCorrect(object):
                 delta = (dpsi_values[ii] - dpsi_values[jj])/(psi_values[ii] - psi_values[jj])
                 if abs(delta) > 0.1/100:
                     if_converge = False
+                    print('relative change of dpsi-----', abs(delta))
 
         return if_converge
 
