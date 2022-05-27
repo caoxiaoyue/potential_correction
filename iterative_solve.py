@@ -257,7 +257,13 @@ class IterativePotentialCorrect(object):
         self.update_lam_s()
         self.update_lam_dpsi()
 
-        self.Mc_RTR_matrices_from(self.pix_mass_prev_iter, self.s_points_prev_iter, self.s_values_prev_iter)
+        self.Mc_RTR_matrices_from(
+            self.pix_mass_prev_iter, 
+            self.s_points_prev_iter, 
+            self.s_values_prev_iter, 
+            self.lam_s_this_iter, 
+            self.lam_dpsi_this_iter
+        )
         self.data_vector = self.data_vector_from(self.Mc_matrix)
 
         #solve the next source and potential corrections
@@ -279,38 +285,35 @@ class IterativePotentialCorrect(object):
             self.r_vector[self._ns:]
         )
         #update lens potential with potential correction at this iteration
-        psi_2d_this_iter = self.pix_mass_prev_iter.psi_map + dpsi_2d #the new 2d lens potential map
+        # psi_2d_this_iter = self.pix_mass_prev_iter.psi_map + dpsi_2d #the new 2d lens potential map
+        psi_2d_this_iter = self.pix_mass_prev_iter.psi_map + 1.2*self.grid_obj.xgrid_data + 0.5*self.grid_obj.ygrid_data + 2.0 #for testing
+
         #rescale the current lens potential, to avoid various degeneracy problems. (see sec.2.3 in our document);
         psi_2d_this_iter, factor = self.rescale_lens_potential(psi_2d_this_iter)
-        a_y, a_x, c = factor
-        #the source reconstruction grid has been changed due to this potential rescaling
-        self.s_points_this_iter[:, 0] += a_y
-        self.s_points_this_iter[:, 1] += a_x
         #get pixelized mass object of this iteration
         self.pix_mass_this_iter = self.pixelized_mass_from(psi_2d_this_iter)
 
-        #sovle for the source under new lens potential
-        self.pix_src_obj.source_inversion(
-            self.pix_mass_this_iter, 
-            lam_s=self.lam_s_this_iter,
-        )
+        #sovle for the source under new lens potential (deprecated!!!); delete this in future
+        # self.pix_src_obj.source_inversion(
+        #     self.pix_mass_this_iter, 
+        #     lam_s=self.lam_s_this_iter,
+        # )
         #Note: self.s_points_this_iter are given in autolens [(y1,x1),(y2,x2),...] order
-        self.s_values_this_iter = self.pix_src_obj.src_recontruct[:] 
-        s_points_this_iter = np.copy(self.pix_src_obj.relocated_pixelization_grid)
-        residual_this_iter = self._d_1d - self.pix_src_obj.mapped_reconstructed_image
-        norm_residual_this_iter = np.asarray(residual_this_iter)/self._n_1d
-
-        assert  self.s_points_this_iter ==  s_points_this_iter    
-
+        # s_values = self.pix_src_obj.src_recontruct[:] 
+        # s_points = np.copy(self.pix_src_obj.relocated_pixelization_grid)
+        # assert np.allclose(self.s_points_this_iter, s_points)  #for testing purpose
+        
         #do visualization
         self.visualize_iteration(iter_num=self.count_iter)
 
         #check convergence
         #TODO, better to be s_{i} and psi_{i+1}?
-        self.merit_this_iter = self.merit_from(
-            norm_residual_this_iter,
-            self.s_values_this_iter,
-            self.pix_src_obj.regularization_matrix
+        #DONE, need test
+        self.merit_this_iter = self.merit_from_src_and_mass(
+            self.s_points_this_iter, 
+            self.s_values_this_iter, 
+            self.lam_s_this_iter, 
+            self.pix_mass_this_iter,
         )
 
         if self.has_converged():
@@ -347,11 +350,52 @@ class IterativePotentialCorrect(object):
         relative_change = (self.merit_prev_iter - self.merit_this_iter)/self.merit_this_iter
         print('next VS current merit:', self.merit_prev_iter, self.merit_this_iter, relative_change)
 
-        # if relative_change < 1e-5:
-        #     return True
-        # else:
-        #     return False 
-        return False
+        if abs(relative_change) < 1e-2:
+            return True
+        else:
+            return False 
+        # return False
+
+
+    def merit_from_src_and_mass(self, s_points, s_values, lam_s, pix_mass_obj):
+        self.pix_src_obj.source_inversion(
+            pix_mass_obj, 
+            lam_s=lam_s,
+        )       
+        
+        points = self.pix_src_obj.relocated_pixelization_grid
+        tri_src = Delaunay(s_points[:, ::-1])
+        src_interpolator = LinearNDInterpolatorExt(tri_src, s_values)
+        values = src_interpolator(points[:,1], points[:,0])
+
+        # print('xxxxxxxxxxxxxxxx')
+        # print(s_points)
+        # print('xxxxxxxxxxxxxxxx')
+        # print(points)
+        # print('xxxxxxxxxxxxxxxx')
+        # print(s_points-points)
+
+        print('xxxxxxxxxxxxxxxx')
+        print(s_values)
+        print('xxxxxxxxxxxxxxxx')
+        print(values)
+        print('xxxxxxxxxxxxxxxx')
+        print(s_values-values)
+
+
+        mapped_reconstructed_image = al.util.leq.mapped_reconstructed_data_via_mapping_matrix_from(
+            mapping_matrix=self.pix_src_obj.blurred_mapping_matrix, reconstruction=values
+        )
+
+        residual = (self.pix_src_obj.mapped_reconstructed_image - self.pix_src_obj.masked_imaging.image)
+        norm_residual = residual / self.pix_src_obj.masked_imaging.noise_map
+        merit = self.merit_from(
+            norm_residual,
+            values,
+            self.pix_src_obj.regularization_matrix,
+        )
+        
+        return merit
 
 
     def run_iter_solve(self):
