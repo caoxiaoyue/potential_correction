@@ -71,7 +71,6 @@ class IterativePotentialCorrect(object):
         self.lam_dpsi_this_iter = self._lam_dpsi_start #potential correction reg
         #2--------the lens mass model of currect iteration
         self.pix_mass_this_iter = self.pixelized_mass_from(self._psi_2d_start) #initialize with lens potential given by macro model
-        self._pix_mass_start = copy.deepcopy(self.pix_mass_this_iter)
         #3---------pix src obj is mainly used for evalulating lens mapping matrix given a lens mass model
         self.pix_src_obj = pixelized_source.PixelizedSource(
             self.masked_imaging, 
@@ -118,31 +117,12 @@ class IterativePotentialCorrect(object):
                 np.matmul(self.grid_obj.Hy_dpsi_2nd_reg.T, self.grid_obj.Hy_dpsi_2nd_reg)   
                     
         #calculate the merit of initial macro model. see eq.16 in our document 
-        mapped_reconstructed_image = al.util.leq.mapped_reconstructed_data_via_mapping_matrix_from(
-            mapping_matrix=self.pix_src_obj.blurred_mapping_matrix, reconstruction=self.pix_src_obj.src_recontruct
-        )
-
-        residual = (self.pix_src_obj.mapped_reconstructed_image - self.pix_src_obj.masked_imaging.image)
-        norm_residual = residual / self.pix_src_obj.masked_imaging.noise_map
-
         self._merit_start = self.merit_from(
             self.pix_src_obj.norm_residual_map,
             self.pix_src_obj.src_recontruct,
             self.pix_src_obj.regularization_matrix
         )
         self.merit_this_iter = self._merit_start
-        print('111111111111111',np.sum(self.pix_src_obj.norm_residual_map))
-        print('111111111111111',np.sum(self.pix_src_obj.src_recontruct))
-        print('111111111111111',np.linalg.slogdet((self.pix_src_obj.regularization_matrix)))
-
-        merit_this = self.merit_from_src_and_mass(
-            self._s_points_start, 
-            self._s_values_start, 
-            self._lam_s_start, 
-            self._pix_mass_start,
-        )
-        print(self._merit_start,'--------', merit_this)
-
 
         #visualize iteration-0
         self.visualize_iteration(iter_num=self.count_iter)
@@ -330,17 +310,11 @@ class IterativePotentialCorrect(object):
         #TODO, better to be s_{i} and psi_{i+1}?
         #DONE, need test
         self.merit_this_iter = self.merit_from_src_and_mass(
-            self._s_points_start, 
-            self._s_values_start, 
-            self._lam_s_start, 
-            self._pix_mass_start,
+            self.s_points_this_iter, 
+            self.s_values_this_iter, 
+            self.lam_s_this_iter, 
+            self.pix_mass_this_iter,
         )
-        # self.merit_this_iter = self.merit_from_src_and_mass(
-        #     self.s_points_this_iter, 
-        #     self.s_values_this_iter, 
-        #     self.lam_s_this_iter, 
-        #     self.pix_mass_this_iter,
-        # )
 
         if self.has_converged():
             return True
@@ -394,33 +368,12 @@ class IterativePotentialCorrect(object):
         src_interpolator = LinearNDInterpolatorExt(tri_src, s_values)
         values = src_interpolator(points[:,1], points[:,0])
 
-        # print('xxxxxxxxxxxxxxxx')
-        # print(s_points)
-        # print('xxxxxxxxxxxxxxxx')
-        # print(points)
-        # print('xxxxxxxxxxxxxxxx')
-        # print(s_points-points)
-
-        # print('xxxxxxxxxxxxxxxx')
-        # print(s_values)
-        # print('xxxxxxxxxxxxxxxx')
-        # print(values)
-        # print('xxxxxxxxxxxxxxxx')
-        print(np.allclose(s_values, values))
-        print(np.allclose(s_points, points))
-
-
         mapped_reconstructed_image = al.util.leq.mapped_reconstructed_data_via_mapping_matrix_from(
             mapping_matrix=self.pix_src_obj.blurred_mapping_matrix, reconstruction=values
         )
 
         residual = (self.pix_src_obj.mapped_reconstructed_image - self.pix_src_obj.masked_imaging.image)
         norm_residual = residual / self.pix_src_obj.masked_imaging.noise_map
-
-        print('222222222222222222', np.sum(norm_residual))
-        print('222222222222222222', np.sum(values))
-        print('222222222222222222', np.linalg.slogdet((self.pix_src_obj.regularization_matrix)))
-
         merit = self.merit_from(
             norm_residual,
             values,
