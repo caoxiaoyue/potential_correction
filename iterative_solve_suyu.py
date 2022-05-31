@@ -308,12 +308,16 @@ class IterativePotentialCorrect(object):
         psi_values = psi_interpolator(self._check_converge_points[:,1], self._check_converge_points[:,0])
 
         if_converge = True
+        abs_delta_list = []
         for ii in range(0, len(dpsi_values)-1):
             for jj in range(ii+1, len(dpsi_values)):
-                delta = (dpsi_values[ii] - dpsi_values[jj])/(psi_values[ii] - psi_values[jj])
-                if abs(delta) > 0.1/100:
+                abs_delta = abs((dpsi_values[ii] - dpsi_values[jj])/(psi_values[ii] - psi_values[jj]))
+                if abs_delta > 0.1/100:
                     if_converge = False
-                    print('relative change of dpsi-----', abs(delta))
+                    abs_delta_list.append(abs_delta)
+        
+        if len(abs_delta_list) > 0:
+            print('max relative change of dpsi-----', max(abs_delta_list))
 
         return if_converge
 
@@ -351,6 +355,7 @@ class IterativePotentialCorrect(object):
         masked_image_data = np.ma.masked_array(self.image_data, mask=self.grid_obj.mask_data)
         plt.imshow(masked_image_data,vmax=vmax,**myargs)
         plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
+        plt.plot(self._check_converge_points[:,1], self._check_converge_points[:,0], 'w+', ms=markersize)
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
         cb.ax.tick_params(labelsize='small')
@@ -425,6 +430,7 @@ class IterativePotentialCorrect(object):
         vmax = np.percentile(cumulative_psi_correct,percent[1]) 
         plt.imshow(masked_cumulative_psi_correct,vmin=vmin,vmax=vmax,**myargs)
         plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
+        plt.plot(self._check_converge_points[:,1], self._check_converge_points[:,0], 'w+', ms=markersize)
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
         cb.ax.tick_params(labelsize='small')
@@ -449,6 +455,7 @@ class IterativePotentialCorrect(object):
         vmax = None #np.percentile(self.dkappa_accum,percent[1]) 
         plt.imshow(masked_cumulative_kappa_correct,vmin=vmin,vmax=vmax,**myargs)
         plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
+        plt.plot(self._check_converge_points[:,1], self._check_converge_points[:,0], 'w+', ms=markersize)
         plt.plot(self._subhalo_fiducial_point[1], self._subhalo_fiducial_point[0], 'k*', ms=markersize)
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
