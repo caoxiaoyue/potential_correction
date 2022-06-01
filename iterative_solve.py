@@ -124,11 +124,6 @@ class IterativePotentialCorrect(object):
         )
         self.merit_this_iter = self._merit_start
 
-        # print('111111111111111',np.sum(self.pix_src_obj.norm_residual_map))
-        # print('111111111111111',np.sum(self.pix_src_obj.src_recontruct))
-        # print('111111111111111',np.linalg.slogdet((self.pix_src_obj.regularization_matrix)))
-
-
         #visualize iteration-0
         self.visualize_iteration(iter_num=self.count_iter)
 
@@ -222,7 +217,6 @@ class IterativePotentialCorrect(object):
         return RTR_matrix    
 
 
-
     def Mc_RTR_matrices_from(
         self, 
         pix_mass_obj, 
@@ -284,9 +278,6 @@ class IterativePotentialCorrect(object):
         self.s_values_this_iter = self.r_vector[0:self._ns]
         self.s_points_this_iter = np.copy(self.pix_src_obj.relocated_pixelization_grid)
 
-        # print('33333333333', np.allclose(self.s_values_this_iter, self._s_values_start))
-        # print('33333333333', np.allclose(self.s_points_this_iter, self._s_points_start))
-
         #extract potential correction
         dpsi_2d = np.zeros_like(self._psi_2d_start, dtype='float')
         dpsi_2d[~self.grid_obj.mask_data] = np.matmul(
@@ -301,16 +292,6 @@ class IterativePotentialCorrect(object):
         psi_2d_this_iter, factor = self.rescale_lens_potential(psi_2d_this_iter)
         #get pixelized mass object of this iteration
         self.pix_mass_this_iter = self.pixelized_mass_from(psi_2d_this_iter)
-
-        #sovle for the source under new lens potential (deprecated!!!); delete this in future
-        # self.pix_src_obj.source_inversion(
-        #     self.pix_mass_this_iter, 
-        #     lam_s=self.lam_s_this_iter,
-        # )
-        #Note: self.s_points_this_iter are given in autolens [(y1,x1),(y2,x2),...] order
-        # s_values = self.pix_src_obj.src_recontruct[:] 
-        # s_points = np.copy(self.pix_src_obj.relocated_pixelization_grid)
-        # assert np.allclose(self.s_points_this_iter, s_points)  #for testing purpose
         
         #do visualization
         self.visualize_iteration(iter_num=self.count_iter)
@@ -381,18 +362,13 @@ class IterativePotentialCorrect(object):
             mapping_matrix=self.pix_src_obj.blurred_mapping_matrix, reconstruction=values
         )
 
-        residual = (self.pix_src_obj.mapped_reconstructed_image - self.pix_src_obj.masked_imaging.image)
+        residual = (mapped_reconstructed_image - self.pix_src_obj.masked_imaging.image)
         norm_residual = residual / self.pix_src_obj.masked_imaging.noise_map
         merit = self.merit_from(
             norm_residual,
             values,
             self.pix_src_obj.regularization_matrix,
         )
-
-        # print('2222222222222222', np.allclose(values, s_values))
-        # print('222222222222222222', np.sum(norm_residual))
-        # print('222222222222222222', np.sum(values))
-        # print('222222222222222222', np.linalg.slogdet((self.pix_src_obj.regularization_matrix)))
 
         return merit
 
@@ -483,11 +459,6 @@ class IterativePotentialCorrect(object):
         #source image given current mass model
         plt.subplot(234)
         this_ax = plt.gca()
-        # ps_plot.visualize_source(
-        #     self.pix_src_obj.relocated_pixelization_grid,
-        #     self.pix_src_obj.src_recontruct,
-        #     ax=this_ax,
-        # )
         ps_plot.visualize_source(
             self.s_points_this_iter,
             self.s_values_this_iter,
