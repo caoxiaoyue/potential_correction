@@ -10,6 +10,8 @@ from potential_correction_util import LinearNDInterpolatorExt
 from matplotlib import pyplot as plt
 import copy
 from plot import pixelized_source as ps_plot
+import os
+from astropy.io import fits
 
 
 class IterativePotentialCorrect(object):
@@ -332,7 +334,7 @@ class IterativePotentialCorrect(object):
                 print('------',ii, self.count_iter)  
 
  
-    def visualize_iteration(self, basedir='./result', iter_num=0):
+    def visualize_iteration(self, basedir='./result', iter_num=0, save_fits=True):
         plt.figure(figsize=(15, 10))
         percent = [0,100]
         cbpar = {}
@@ -353,9 +355,10 @@ class IterativePotentialCorrect(object):
         vmin = np.percentile(self.image_data,percent[0]) 
         vmax = np.percentile(self.image_data,percent[1]) 
         masked_image_data = np.ma.masked_array(self.image_data, mask=self.grid_obj.mask_data)
-        plt.imshow(masked_image_data,vmax=vmax,**myargs)
+        plt.imshow(masked_image_data,vmin=vmin,vmax=vmax,**myargs)
         plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
         plt.plot(self._check_converge_points[:,1], self._check_converge_points[:,0], 'w+', ms=markersize)
+        plt.plot(self._subhalo_fiducial_point[1], self._subhalo_fiducial_point[0], 'k*', ms=markersize)
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
         cb.ax.tick_params(labelsize='small')
@@ -469,3 +472,25 @@ class IterativePotentialCorrect(object):
         plt.tight_layout()
         plt.savefig(f'{basedir}/{iter_num}.jpg', bbox_inches='tight')
         plt.close()
+
+        if save_fits:
+            self.save_correction_fits(
+                basedir=basedir,
+                iter_num=iter_num,
+                kappa_correct=cumulative_kappa_correct,
+                psi_correct=cumulative_psi_correct,
+            )
+
+
+    def save_correction_fits(
+        self, 
+        basedir=None, 
+        iter_num=None,
+        kappa_correct=None,
+        psi_correct=None,
+    ):
+        abs_path = os.path.abspath(basedir)  #get absolute path
+        if not os.path.exists(f"{abs_path}/fits"):  #check if path exist
+            os.makedirs(f"{abs_path}/fits") #create new directory recursively
+        fits.writeto(f'{basedir}/fits/kappa_correction_{iter_num}.fits', kappa_correct, overwrite=True)
+        fits.writeto(f'{basedir}/fits/psi_correction_{iter_num}.fits', psi_correct, overwrite=True)

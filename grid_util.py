@@ -3,7 +3,7 @@ import autolens as al
 from matplotlib import pyplot as plt
 import pickle
 
-def clean_mask(in_mask):
+def clean_mask_old(in_mask):
     '''
     in_mask: the input 2d mask, a 2d bool numpy array
     out_mask: the output 2d mask after clipping
@@ -23,6 +23,37 @@ def clean_mask(in_mask):
                     if_exposed = True
                 if not if_exposed:
                     out_mask[i,j] = False
+    return out_mask
+
+
+def clean_mask(in_mask):
+    '''
+    in_mask: the input 2d mask, a 2d bool numpy array
+    out_mask: the output 2d mask after clipping
+
+    the cliping scheme following the method in https://arxiv.org/abs/0804.2827 (see figure-11), remove the so-called "exposed pixels".
+    "exposed pixels" has no ajacent pixels so that the gradient can not be calculated via the finite difference.
+    '''
+    out_mask = np.ones_like(in_mask).astype('bool')
+    n1, n2 = in_mask.shape
+    for i in range(2,n1-2): #Not range(n1), because I don't want to deal the index error related to the bound
+        for j in range(2,n2-2):
+            if not in_mask[i,j]:
+                if_exposed_0 = True
+                if_exposed_1 = True
+
+                if ~in_mask[i-1,j] and ~in_mask[i-2,j]:
+                    if_exposed_0 = False
+                if ~in_mask[i+1,j] and ~in_mask[i+2,j]:
+                    if_exposed_0 = False
+                if ~in_mask[i,j-1] and ~in_mask[i,j-2]:
+                    if_exposed_1 = False
+                if ~in_mask[i,j+1] and ~in_mask[i,j+2]:
+                    if_exposed_1 = False
+
+                if not (if_exposed_0 or if_exposed_1):
+                    out_mask[i,j] = False
+
     return out_mask
 
 
@@ -342,6 +373,56 @@ def diff_2nd_reg_nopad_operator_from_mask(mask, dpix=1.0):
             indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
             Hxx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_x**2   
         else:
+            pass
+
+    return Hyy, Hxx
+
+
+def diff_2nd_reg_nopad_operator_from_mask_koopman(mask, dpix=1.0):
+    """
+    Receive a mask, use it to generate the 2nd differential operator matrix Hxx and Hyy.
+    Hxx (Hyy) has a shape of [n_unmasked_pixels, n_unmasked_pixels],
+    when it act on the unmasked data, generating the 2nd x/y-derivative of the unmasked data.
+
+    dpix: pixel size in unit of arcsec.
+    """
+    unmask = ~mask
+    i_indices_unmasked, j_indices_unmasked = np.where(unmask)
+    indices_1d_unmasked = np.where(unmask.flatten())[0]
+    n_unmasked_pixels = len(i_indices_unmasked) 
+    Hxx = np.zeros((n_unmasked_pixels, n_unmasked_pixels)) #x-direction gradient operator matrix
+    Hyy = np.zeros((n_unmasked_pixels, n_unmasked_pixels)) #y-direction gradient operator matrix
+    step_y = -1.0*dpix #the minus sign is due to the y-coordinate decrease the pixel_size as index i along axis-0 increase 1.
+    step_x = 1.0*dpix #no minus, becasue the x-coordinate increase as index j along axis-1 increase.
+
+    for count in range(n_unmasked_pixels):
+        i, j = i_indices_unmasked[count], j_indices_unmasked[count]
+        #------check y-direction
+        #try 2nd diff first 
+        if unmask[i+1,j] and unmask[i+2,j]: #2nd forward diff
+            indices_tmp = np.ravel_multi_index([(i, i+1, i+2), (j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hyy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_y**2 
+        elif unmask[i-1,j] and unmask[i-2,j]: #2nd backward diff
+            indices_tmp = np.ravel_multi_index([(i, i-1, i-2), (j, j, j)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hyy[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_y**2       
+        else:
+            print('no-padding pixel, y-direction: ',i,j)
+            pass
+
+        #------check x-direction  
+        #try 2nd diff;
+        if unmask[i, j+1] and unmask[i, j+2]: #2nd forward diff
+            indices_tmp = np.ravel_multi_index([(i, i, i), (j, j+1, j+2)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hxx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_x**2
+        elif unmask[i, j-1] and unmask[i, j-2]: #2nd backward diff
+            indices_tmp = np.ravel_multi_index([(i, i, i), (j, j-1, j-2)], unmask.shape)
+            indices_of_indices_1d_unmasked = [np.where(indices_1d_unmasked == item)[0][0] for item in indices_tmp]
+            Hxx[count,indices_of_indices_1d_unmasked] = np.array([1.0, -2.0, 1.0])/step_x**2     
+        else:
+            print('no-padding pixel, x-direction: ',i,j)
             pass
 
     return Hyy, Hxx
@@ -756,7 +837,9 @@ class SparseDpsiGrid(object):
 
 
     def get_diff_2nd_reg_operator_dpsi(self):
-        self.Hy_dpsi_2nd_reg, self.Hx_dpsi_2nd_reg = diff_2nd_reg_nopad_operator_from_mask(self.mask_dpsi) #for reg matrix, set dpix to 1, to be consistent to suyu06 eq.A.3
+        self.Hy_dpsi_2nd_reg, self.Hx_dpsi_2nd_reg = diff_2nd_reg_nopad_operator_from_mask_koopman(self.mask_dpsi) #for reg matrix, set dpix to 1, to be consistent to suyu06 eq.A.3
+        # self.Hy_dpsi_2nd_reg, self.Hx_dpsi_2nd_reg = diff_2nd_reg_nopad_operator_from_mask(self.mask_dpsi) #for reg matrix, set dpix to 1, to be consistent to suyu06 eq.A.3
+        # self.Hy_dpsi_2nd_reg, self.Hx_dpsi_2nd_reg = diff_2nd_reg_operator_from_mask(self.mask_dpsi) #for reg matrix, set dpix to 1, to be consistent to suyu06 eq.A.3
 
 
     def get_hamiltonian_operator_data(self):

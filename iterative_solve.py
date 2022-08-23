@@ -297,12 +297,13 @@ class IterativePotentialCorrect(object):
         self.visualize_iteration(iter_num=self.count_iter)
 
         #check convergence
-        #TODO, better to be s_{i} and psi_{i+1}?
+        #todo, better to be s_{i} and psi_{i+1}?
         #DONE, need test
+        #Test passed
         self.merit_this_iter = self.merit_from_src_and_mass(
-            self.s_points_this_iter, 
-            self.s_values_this_iter, 
-            self.lam_s_this_iter, 
+            self.s_points_prev_iter, 
+            self.s_values_prev_iter, 
+            self.lam_s_prev_iter, 
             self.pix_mass_this_iter,
         )
 
@@ -340,7 +341,7 @@ class IterativePotentialCorrect(object):
         relative_change = (self.merit_prev_iter - self.merit_this_iter)/self.merit_this_iter
         print('next VS current merit:', self.merit_prev_iter, self.merit_this_iter, relative_change)
 
-        if abs(relative_change) < 1e-2:
+        if abs(relative_change) < 1e-8:
             return True
         else:
             return False 
@@ -409,6 +410,7 @@ class IterativePotentialCorrect(object):
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
         cb.ax.tick_params(labelsize='small')
+        plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
         plt.xlim(-1.0*limit, limit)
         plt.ylim(-1.0*limit, limit)
         plt.title(f'Data, Niter={iter_num}')
@@ -430,6 +432,7 @@ class IterativePotentialCorrect(object):
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
         cb.ax.tick_params(labelsize='small')
+        plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
         plt.xlim(-1.0*limit, limit)
         plt.ylim(-1.0*limit, limit)
         plt.title('Model')
@@ -447,6 +450,7 @@ class IterativePotentialCorrect(object):
             mask=self.grid_obj.mask_data
         )  
         plt.imshow(norm_residual_map_2d,vmin=vmin,vmax=vmax,**myargs)
+        plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
         cb.ax.tick_params(labelsize='small')

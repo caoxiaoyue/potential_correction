@@ -109,3 +109,45 @@ tracer.output_to_json(file_path=path.join(dataset_path, "tracer.json"))
 """
 The dataset can be viewed in the folder `autolens_workspace/imaging/no_lens_light/mass_sie__source_sersic`.
 """
+
+solver = al.PointSolver(
+    grid=grid,
+    use_upscaling=True,
+    upscale_factor=2,
+    pixel_scale_precision=0.001,
+    distance_to_source_centre=0.001,
+)
+
+positions = solver.solve(
+    lensing_obj=tracer,
+    source_plane_coordinate=(0.0, 0.0),
+)
+positions.output_to_json(path.join(dataset_path, "positions.json"), overwrite=True)
+
+
+import numpy as np
+def findOverlap(positions, min_distance):
+    """
+    finds overlapping solutions, deletes multiples and deletes non-solutions and if it is not a solution, deleted as well
+    """
+    x_mins = positions[:,1]
+    y_mins = positions[:,0]
+    n = len(x_mins)
+    idex = []
+    for i in range(n):
+        if i == 0:
+            pass
+        else:
+            for j in range(0, i):
+                if abs(x_mins[i] - x_mins[j] < min_distance and abs(y_mins[i] - y_mins[j]) < min_distance):
+                    idex.append(i)
+                    break
+    x_mins = np.delete(x_mins, idex, axis=0)
+    y_mins = np.delete(y_mins, idex, axis=0)
+    return np.vstack([y_mins, x_mins]).T
+
+positions = findOverlap(positions, 0.1)
+positions = [tuple(value) for value in positions]
+import json
+with open(path.join(dataset_path, "positions.json"), 'w') as f:
+    json.dump(positions, f, indent=4)
