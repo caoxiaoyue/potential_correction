@@ -124,6 +124,9 @@ class IterativePotentialCorrect(object):
         )
         self.merit_this_iter = self._merit_start
 
+        #a list which save the potential correction map
+        self._dpsi_map_coarse = [np.zeros_like(self.grid_obj.xgrid_dpsi)] #the potential correction map of iteration-0 is 0
+
         #visualize iteration-0
         self.visualize_iteration(iter_num=self.count_iter)
 
@@ -199,7 +202,7 @@ class IterativePotentialCorrect(object):
             source_points, #previously found best-fit src pixlization grids
             source_values, #previously found best-fit src reconstruction
             self.src_plane_dpsi_yx, 
-            cross_size=1e-3,
+            cross_size=1e-3, #TODO, better way to calculate the gradient? cross-size?
         )
         return pcu.source_gradient_matrix_from(source_gradient)  
 
@@ -290,6 +293,11 @@ class IterativePotentialCorrect(object):
 
         #rescale the current lens potential, to avoid various degeneracy problems. (see sec.2.3 in our document);
         psi_2d_this_iter, factor = self.rescale_lens_potential(psi_2d_this_iter)
+        #save the coarse potential correction map
+        dpsi_map_coarse = np.zeros_like(self.grid_obj.xgrid_dpsi)
+        dpsi_map_coarse[~self.grid_obj.mask_dpsi] = self.r_vector[self._ns:]
+        dpsi_map_coarse = dpsi_map_coarse + factor[0]*self.grid_obj.ygrid_dpsi + factor[1]*self.grid_obj.xgrid_dpsi + factor[2]
+        self._dpsi_map_coarse.append(dpsi_map_coarse)
         #get pixelized mass object of this iteration
         self.pix_mass_this_iter = self.pixelized_mass_from(psi_2d_this_iter)
         
@@ -414,7 +422,6 @@ class IterativePotentialCorrect(object):
         plt.xlim(-1.0*limit, limit)
         plt.ylim(-1.0*limit, limit)
         plt.title(f'Data, Niter={iter_num}')
-        plt.xlabel('Arcsec')
         plt.ylabel('Arcsec')
 
         #model reconstruction given current mass model
@@ -436,8 +443,6 @@ class IterativePotentialCorrect(object):
         plt.xlim(-1.0*limit, limit)
         plt.ylim(-1.0*limit, limit)
         plt.title('Model')
-        plt.xlabel('Arcsec')
-        plt.ylabel('Arcsec')
 
         #normalized residual
         norm_residual_map_2d = np.zeros_like(self.image_data)
@@ -457,8 +462,6 @@ class IterativePotentialCorrect(object):
         plt.xlim(-1.0*limit, limit)
         plt.ylim(-1.0*limit, limit)
         plt.title('Norm-residual')
-        plt.xlabel('Arcsec')
-        plt.ylabel('Arcsec')
 
         #source image given current mass model
         plt.subplot(234)
@@ -469,19 +472,18 @@ class IterativePotentialCorrect(object):
             ax=this_ax,
         )
         this_ax.set_title('Source')
-        plt.xlabel('Arcsec')
-        plt.ylabel('Arcsec')
+        this_ax.set_xlabel('Arcsec')
+        this_ax.set_ylabel('Arcsec')
 
         #cumulative potential correction
-        cumulative_psi_correct =  np.copy(self.pix_mass_this_iter.psi_map - self._psi_2d_start)
-        cumulative_psi_correct[self.grid_obj.mask_data] = 0.0
+        cumulative_psi_correct =  np.asarray(self._dpsi_map_coarse).sum(axis=0)
         masked_cumulative_psi_correct = np.ma.masked_array(
             cumulative_psi_correct, 
-            mask=self.grid_obj.mask_data
+            mask=self.grid_obj.mask_dpsi
         )
         plt.subplot(235)
-        vmin = np.percentile(cumulative_psi_correct,percent[0]) 
-        vmax = np.percentile(cumulative_psi_correct,percent[1]) 
+        vmin = None #np.percentile(cumulative_psi_correct,percent[0]) 
+        vmax = None #np.percentile(cumulative_psi_correct,percent[1]) 
         plt.imshow(masked_cumulative_psi_correct,vmin=vmin,vmax=vmax,**myargs)
         plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
         cb=plt.colorbar(**cbpar)
@@ -491,17 +493,16 @@ class IterativePotentialCorrect(object):
         plt.ylim(-1.0*limit, limit)
         plt.title(r'potential corrections')
         plt.xlabel('Arcsec')
-        plt.ylabel('Arcsec')
 
         cumulative_kappa_correct = np.zeros_like(cumulative_psi_correct)
         cumulative_kappa_correct_1d = np.matmul(
-            self.grid_obj.hamiltonian_data,
-            cumulative_psi_correct[~self.grid_obj.mask_data]
+            self.grid_obj.hamiltonian_dpsi,
+            cumulative_psi_correct[~self.grid_obj.mask_dpsi]
         )
-        cumulative_kappa_correct[~self.grid_obj.mask_data] = cumulative_kappa_correct_1d
+        cumulative_kappa_correct[~self.grid_obj.mask_dpsi] = cumulative_kappa_correct_1d
         masked_cumulative_kappa_correct = np.ma.masked_array(
             cumulative_kappa_correct, 
-            mask=self.grid_obj.mask_data
+            mask=self.grid_obj.mask_dpsi
         )
         plt.subplot(236)
         vmin = None #np.percentile(self.dkappa_accum,percent[0]) 
@@ -516,7 +517,6 @@ class IterativePotentialCorrect(object):
         plt.ylim(-1.0*limit, limit)
         plt.title(r'kappa corrections')
         plt.xlabel('Arcsec')
-        plt.ylabel('Arcsec')
 
         plt.tight_layout()
         plt.savefig(f'{basedir}/{iter_num}.jpg', bbox_inches='tight')
