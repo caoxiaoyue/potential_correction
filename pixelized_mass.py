@@ -1,5 +1,5 @@
 import numpy as np
-import grid_util
+from grid import util as grid_util
 from scipy.spatial import Delaunay
 from potential_correction_util import LinearNDInterpolatorExt
 

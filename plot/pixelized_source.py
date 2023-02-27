@@ -20,7 +20,7 @@ def visualize_source(
 
     half_width = max(np.abs(points.min()), np.abs(points.max()))
     half_width *= enlarge_factor
-    extent = [-1.0*half_width, half_width, -1.0*half_width, half_width]
+    # extent = [-1.0*half_width, half_width, -1.0*half_width, half_width]
 
     coordinate_1d, dpix = np.linspace(-1.0*half_width, half_width, npixels, endpoint=True, retstep=True)
     xgrid, ygrid = np.meshgrid(coordinate_1d, coordinate_1d)

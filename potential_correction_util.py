@@ -3,7 +3,9 @@ import numpy as np
 from scipy.interpolate import LinearNDInterpolator as linterp
 from scipy.interpolate import NearestNDInterpolator as nearest
 from scipy.interpolate import griddata  # , CloughTocher2DInterpolator
-import grid_util
+from grid import util as grid_util
+from grid.sparse_grid import SparseDpsiGrid
+# from scipy.ndimage import morphology
 
 
 def source_gradient_from(source_points, source_values, eval_points, cross_size=1e-3):
@@ -138,6 +140,68 @@ def rescale_psi_map(psi_anchor_values, psi_anchor_points, psi_new, psi_map_new, 
         return a_x*xgrid + a_y*ygrid + c + psi_map_new
 
 
+def xy_transform(x, y, x_cen, y_cen, phi):
+    """
+    A clock-wise rotational matrix exert on vector (x, y)
+    :param x: the x coordinate of the vector, which need to be rotated 
+    :param y: the y coordinate of the vector, which need to be rotated  
+    :param x_cen: the x coordinate of rotation center
+    :param y_cen: the y coordinate of rotation center
+    :param phi: the rotation angle in degree
+    x,y can be a scalar or array. suppose x,y is a scalar, then this
+    matrix rotate the vector (x,y) clockwisely with respect to the
+    center (x_cen,y_cen).
+    """
+    phi = np.deg2rad(phi)
+    xnew=(x-x_cen)*np.cos(phi)+(y-y_cen)*np.sin(phi)
+    ynew=-(x-x_cen)*np.sin(phi)+(y-y_cen)*np.cos(phi)
+    return (xnew, ynew)
+
+    
+def pesudo_plate(xgrid, ygrid, xc=0.0, yc=0.0, q=1.0, PA=0.0, rad=0.5, amp=1.0):
+    xgrid_new, ygrid_new = xy_transform(xgrid, ygrid, xc, yc, PA)
+    r = np.sqrt(q*xgrid_new**2 + ygrid_new**2/q)
+
+    image = np.zeros_like(xgrid, dtype='float')
+    image[r<rad] = amp
+    return image
+
+
+def arc_mask_from_source(
+    xgrid=None,
+    ygrid=None,
+    xc=0.0, 
+    yc=0.0, 
+    axis_ratio=1.0, 
+    PA=90.0, 
+    radius=0.3,
+    thresh=0.5,
+):
+    """
+    generate a mask for the lensed arc, based on a ellipse on the source plane
+    qunatified by the center/axis-ratio/PA/radius
+    """
+    lensed_image = pesudo_plate(
+        xgrid, 
+        ygrid, 
+        xc=xc, 
+        yc=yc, 
+        q=axis_ratio, 
+        PA=PA, 
+        rad=radius, 
+        amp=1.0
+    )
+
+    model_mask = np.zeros_like(lensed_image, dtype='bool')
+    model_mask[lensed_image>thresh] = False
+    model_mask[lensed_image<thresh] = True
+
+    # model_mask = morphology.binary_opening(model_mask, iterations=10)
+    # model_mask = morphology.binary_dilation(model_mask, iterations=3)
+
+    return model_mask
+
+
 class LinearNDInterpolatorExt(object):
     # https://stackoverflow.com/questions/20516762/extrapolate-with-linearndinterpolator
     # use nearest neighbour interpolation to replace Linear interpolation, to avoid NaN
@@ -162,7 +226,7 @@ if __name__ == '__main__':
     ygrid_data = grid_data.native[:,:,0]
     rgrid = np.sqrt(xgrid_data**2 + ygrid_data**2)
     mask = rgrid>0.25
-    grid_obj = grid_util.SparseDpsiGrid(mask, 0.1, shape_2d_dpsi=(5,5))
+    grid_obj = SparseDpsiGrid(mask, 0.1, shape_2d_dpsi=(5,5))
     grid_obj.show_grid()
 
     dpsi_gradient_matrix = dpsi_gradient_operator_from(grid_obj.Hx_dpsi, grid_obj.Hy_dpsi)

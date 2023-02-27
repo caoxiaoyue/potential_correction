@@ -1,6 +1,6 @@
 import autolens as al
 import numpy as np
-import grid_util
+from grid.sparse_grid import SparseDpsiGrid
 import pixelized_mass
 import pixelized_source
 import potential_correction_util as pcu
@@ -10,6 +10,9 @@ from potential_correction_util import LinearNDInterpolatorExt
 from matplotlib import pyplot as plt
 import copy
 from plot import pixelized_source as ps_plot
+import os
+import logging
+from astropy.io import fits
 
 
 class IterativePotentialCorrect(object):
@@ -28,7 +31,13 @@ class IterativePotentialCorrect(object):
 
         if shape_2d_dpsi is None:
             shape_2d_dpsi = self.image_data.shape
-        self.grid_obj = grid_util.SparseDpsiGrid(image_mask, dpix_data, shape_2d_dpsi=shape_2d_dpsi) #Note, mask_data has not been cleaned
+        self.grid_obj = SparseDpsiGrid(image_mask, dpix_data, shape_2d_dpsi=shape_2d_dpsi) #Note, mask_data has not been cleaned
+
+        image_mask = al.Mask2D(mask=self.grid_obj.mask_data, pixel_scales=(dpix_data, dpix_data))
+        self.masked_imaging = self.masked_imaging.apply_mask(mask=image_mask) #since mask are cleaned, re-apply it to autolens imaging object
+        self.masked_imaging = self.masked_imaging.apply_settings(
+            settings=al.SettingsImaging(sub_size=4, sub_size_inversion=4)
+        )
 
         self.shape_2d_src = shape_2d_src
 
@@ -41,8 +50,9 @@ class IterativePotentialCorrect(object):
         lam_dpsi_start=1e9,
         lam_dpsi_type='4th',
         psi_anchor_points=None,
-        check_converge_points=None,
         subhalo_fiducial_point=None,
+        penalty_file="./penalty.txt",
+        save_fits=False,
     ):
         """
         psi_2d_0: the lens potential map of the initial start mass model, typicall given by a macro model like elliptical power law model.
@@ -60,9 +70,13 @@ class IterativePotentialCorrect(object):
         self._lam_s_start = lam_s_start
         self._lam_dpsi_start = lam_dpsi_start
         self._psi_anchor_points = psi_anchor_points
-        self._check_converge_points = check_converge_points
         self._psi_2d_start = psi_2d_start
         self._psi_2d_start[self.masked_imaging.mask] = 0.0 #set the lens potential of masked pixels to 0
+        self.merit_file = penalty_file
+        self.penalty_file_handle = open(self.merit_file, 'w')
+        self.dlm = " "*6
+        self.penalty_file_handle.write(f"niter{self.dlm}src_light_term{self.dlm}dpsi_term{self.dlm}chi2_image\n")
+        self.save_fits = save_fits
 
         #do iteration-0, the macro model
         self.count_iter = 0 #count the iteration number
@@ -110,11 +124,26 @@ class IterativePotentialCorrect(object):
         ) #the potential correction gradient operator, see the eq.8 in our document
         self._dpsi_grid_points = np.vstack([self.grid_obj.ygrid_dpsi_1d, self.grid_obj.xgrid_dpsi_1d]).T #points of sparse potential correction grid
         if lam_dpsi_type == '4th':
+            self.grid_obj.get_diff_4th_reg_operator_dpsi()
             self._HTH_dpsi = np.matmul(self.grid_obj.Hx_dpsi_4th_reg.T, self.grid_obj.Hx_dpsi_4th_reg) + \
                 np.matmul(self.grid_obj.Hy_dpsi_4th_reg.T, self.grid_obj.Hy_dpsi_4th_reg)
         elif lam_dpsi_type == '2nd':
+            self.grid_obj.get_diff_2nd_reg_operator_dpsi()
             self._HTH_dpsi = np.matmul(self.grid_obj.Hx_dpsi_2nd_reg.T, self.grid_obj.Hx_dpsi_2nd_reg) + \
-                np.matmul(self.grid_obj.Hy_dpsi_2nd_reg.T, self.grid_obj.Hy_dpsi_2nd_reg)   
+                np.matmul(self.grid_obj.Hy_dpsi_2nd_reg.T, self.grid_obj.Hy_dpsi_2nd_reg)
+        elif lam_dpsi_type == 'gauss':
+            self.grid_obj.get_gauss_reg_operator_dpsi(scale=1.0)
+            self._HTH_dpsi = self.grid_obj.gauss_reg_dpsi
+            # print('xxxxxxxxxxxxxxxxxxxxxxxxx', np.linalg.slogdet(self._HTH_dpsi))
+            assert np.allclose(self._HTH_dpsi, self._HTH_dpsi.T)
+            # print(np.linalg.eigh(self.grid_obj.gauss_reg_dpsi)[0])
+            # xx = 2.0 * np.sum(
+            #     np.log(np.diag(np.linalg.cholesky(self._HTH_dpsi)))
+            # )
+            # print('xxxxxxxxxxxxxxxxxxxxxxxxx', xx) 
+        elif lam_dpsi_type == 'exp':
+            self.grid_obj.get_exp_reg_operator_dpsi(scale=1.0)
+            self._HTH_dpsi = self.grid_obj.exp_reg_dpsi   
                     
         #calculate the merit of initial macro model. see eq.16 in our document 
         self._merit_start = self.merit_from(
@@ -143,7 +172,26 @@ class IterativePotentialCorrect(object):
                     s_values_1d
                 )
             )
-        return float(merit_this)      
+        return float(merit_this)
+
+
+    def write_penalty_this_iter(self, iter_num):
+        reg_src =  np.matmul(
+            self.r_vector[0:self._ns].T, 
+            np.matmul(self.RTR_matrix[0:self._ns, 0:self._ns], self.r_vector[0:self._ns]),
+        )
+        reg_dpsi =  np.matmul(
+            self.r_vector[self._ns:].T, 
+            np.matmul(self.RTR_matrix[self._ns:, self._ns:], self.r_vector[self._ns:]),
+        )
+        logging.info(f'the log det of reg_dpsi_matrix {np.linalg.slogdet(self.RTR_matrix[self._ns:, self._ns:])}')
+        mapped_reconstructed_image_1d = np.matmul(self.Mc_matrix, self.r_vector)
+        residual_1d = (mapped_reconstructed_image_1d - self._d_1d)
+        norm_residual_1d = residual_1d / self._n_1d
+        chi2_image_1d = np.sum(norm_residual_1d**2)
+
+        self.penalty_file_handle.write(f"{iter_num}{self.dlm}{reg_src:.2f}{self.dlm}{reg_dpsi:.2f}{self.dlm}{chi2_image_1d:.2f}\n")
+        self.penalty_file_handle.flush()
 
 
     def pixelized_mass_from(self, psi_2d):
@@ -202,7 +250,7 @@ class IterativePotentialCorrect(object):
             source_points, #previously found best-fit src pixlization grids
             source_values, #previously found best-fit src reconstruction
             self.src_plane_dpsi_yx, 
-            cross_size=1e-3, #TODO, better way to calculate the gradient? cross-size?
+            cross_size=0.01, #TODO, better way to calculate the gradient? cross-size?
         )
         return pcu.source_gradient_matrix_from(source_gradient)  
 
@@ -216,6 +264,8 @@ class IterativePotentialCorrect(object):
         RTR_matrix[0:self._ns, 0:self._ns] = np.copy(pix_src_obj.regularization_matrix)
 
         RTR_matrix[self._ns:, self._ns:] = np.copy(lam_dpsi * self._HTH_dpsi) #Note, not lam_dpsi**2
+        # print('tttttttttttttttttttttt', np.linalg.slogdet(self._HTH_dpsi))
+        # print('tttttttttttttttttttttt', np.linalg.slogdet(RTR_matrix[self._ns:, self._ns:]))
 
         return RTR_matrix    
 
@@ -277,6 +327,12 @@ class IterativePotentialCorrect(object):
         # print('~~~~~~~~~~~~~~~~iteration-{}, r-condition number {:.5e}'.format(self.count_iter, 1/np.linalg.cond(self.curve_reg_term)))
         self.r_vector = linalg.solve(self.curve_reg_term, self.data_vector)
 
+        #calculate the evidence 
+        # print("evidence values is------------------", self.evidence_from())
+
+        #write values of each penalty term in eq.16 in our document to penlaty.txt file
+        self.write_penalty_this_iter(self.count_iter) 
+
         #extract source
         self.s_values_this_iter = self.r_vector[0:self._ns]
         self.s_points_this_iter = np.copy(self.pix_src_obj.relocated_pixelization_grid)
@@ -322,6 +378,44 @@ class IterativePotentialCorrect(object):
         self.update_iterations()
         return False 
 
+    
+    def evidence_from(self):
+        #image chi2 term
+        mapped_reconstructed_image_1d = np.matmul(self.Mc_matrix, self.r_vector)
+        residual_1d = (mapped_reconstructed_image_1d - self._d_1d)
+        norm_residual_1d = residual_1d / self._n_1d
+        chi2_term = np.sum(norm_residual_1d**2)
+
+        #curve reg term
+        sign, logdet = np.linalg.slogdet(self.curve_reg_term)
+        if sign <= 0:
+            raise ValueError('The curve reg term is not positive definite!')
+        log_det_curve_reg_term = logdet
+
+        #log det reg term
+        sign, logdet = np.linalg.slogdet(self.RTR_matrix)
+        # print('yyyyyyyyyyyyyyyyyyyyyy', sign, logdet)
+        # print('yyyyyyyyyyyyyyyyyyyyyy', np.linalg.slogdet(self.RTR_matrix[0:self._ns, 0:self._ns]))
+        # print('yyyyyyyyyyyyyyyyyyyyyy', np.linalg.slogdet(self.RTR_matrix[self._ns:, self._ns:]))
+
+        if sign <= 0:
+            raise ValueError('The RTR term is not positive definite!')
+        log_det_reg_term = logdet
+
+        #reg r term
+        reg_r_term = np.matmul(
+            self.r_vector.T, 
+            np.matmul(self.RTR_matrix, self.r_vector),
+        )
+
+        #noise norm term
+        sign, logdet = np.linalg.slogdet(self._inv_cov_matrix)
+        if sign <= 0:
+            raise ValueError('The inv cov matrix is not positive definite!')
+        noise_term = logdet
+
+        return chi2_term + log_det_curve_reg_term - log_det_reg_term + reg_r_term + noise_term
+        
     
     def rescale_lens_potential(self, psi_2d_in):
         if not hasattr(self, 'tri_psi_interp'):
@@ -386,14 +480,19 @@ class IterativePotentialCorrect(object):
         for ii in range(1, self._niter):
             condition = self.run_this_iteration()
             if condition:
-                print('------','code converge')  
+                print('------','code converge')
+                self.penalty_file_handle.close()  
                 break
             else:
                 print('------',ii, self.count_iter)  
 
         
     def visualize_iteration(self, basedir='./result', iter_num=0):
-        plt.figure(figsize=(15, 10))
+        abs_path = os.path.abspath(basedir)  #get absolute path
+        if not os.path.exists(basedir):  #check if path exist
+            os.makedirs(abs_path) #create new directory recursively
+
+        plt.figure(figsize=(15, 15))
         percent = [0,100]
         cbpar = {}
         cbpar['fraction'] = 0.046
@@ -408,27 +507,38 @@ class IterativePotentialCorrect(object):
         rgrid = np.sqrt(self.grid_obj.xgrid_data**2 + self.grid_obj.ygrid_data**2)
         limit = np.max(rgrid[~self.grid_obj.mask_data])
 
-        #--------data image
-        plt.subplot(231)
-        vmin = np.percentile(self.image_data,percent[0]) 
-        vmax = np.percentile(self.image_data,percent[1]) 
-        masked_image_data = np.ma.masked_array(self.image_data, mask=self.grid_obj.mask_data)
-        plt.imshow(masked_image_data,vmax=vmax,**myargs)
+        #--------SN image
+        plt.subplot(331)
+        masked_SN_data = np.ma.masked_array(self.image_data/self.image_noise, mask=self.grid_obj.mask_data)
+        plt.imshow(masked_SN_data, **myargs)
         plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
         cb.ax.tick_params(labelsize='small')
-        plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
         plt.xlim(-1.0*limit, limit)
         plt.ylim(-1.0*limit, limit)
-        plt.title(f'Data, Niter={iter_num}')
+        plt.title(f'Data-SN, Niter={iter_num}')
         plt.ylabel('Arcsec')
 
-        #model reconstruction given current mass model
+        #--------data image
+        plt.subplot(332)
+        vmin = np.percentile(self.image_data,percent[0]) 
+        vmax = np.percentile(self.image_data,percent[1]) 
+        masked_image_data = np.ma.masked_array(self.image_data, mask=self.grid_obj.mask_data)
+        plt.imshow(masked_image_data, vmin=vmin, vmax=vmax,**myargs)
+        plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
+        cb=plt.colorbar(**cbpar)
+        cb.ax.minorticks_on()
+        cb.ax.tick_params(labelsize='small')
+        plt.xlim(-1.0*limit, limit)
+        plt.ylim(-1.0*limit, limit)
+        plt.title(f'Data-image')
+
+        #---------model reconstruction given current mass model
+        plt.subplot(333)
         mapped_reconstructed_image_2d = np.zeros_like(self.image_data)
         self.pix_src_obj.source_inversion(self.pix_mass_this_iter, lam_s=self.lam_s_this_iter)
         mapped_reconstructed_image_2d[~self.grid_obj.mask_data] = np.copy(self.pix_src_obj.mapped_reconstructed_image)
-        plt.subplot(232)
         vmin = np.percentile(mapped_reconstructed_image_2d,percent[0]) 
         vmax = np.percentile(mapped_reconstructed_image_2d,percent[1])
         mapped_reconstructed_image_2d = np.ma.masked_array(
@@ -442,12 +552,12 @@ class IterativePotentialCorrect(object):
         plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
         plt.xlim(-1.0*limit, limit)
         plt.ylim(-1.0*limit, limit)
-        plt.title('Model')
+        plt.title('Model-image')
 
-        #normalized residual
+        #----------normalized residual
+        plt.subplot(334)
         norm_residual_map_2d = np.zeros_like(self.image_data)
         norm_residual_map_2d[~self.grid_obj.mask_data] = np.copy(self.pix_src_obj.norm_residual_map)
-        plt.subplot(233)
         vmin = np.percentile(norm_residual_map_2d,percent[0]) 
         vmax = np.percentile(norm_residual_map_2d,percent[1])
         norm_residual_map_2d = np.ma.masked_array(
@@ -461,39 +571,84 @@ class IterativePotentialCorrect(object):
         cb.ax.tick_params(labelsize='small')
         plt.xlim(-1.0*limit, limit)
         plt.ylim(-1.0*limit, limit)
+        plt.ylabel('Arcsec')
         plt.title('Norm-residual')
 
-        #source image given current mass model
-        plt.subplot(234)
+        #-------------source image given current mass model
+        plt.subplot(335)
         this_ax = plt.gca()
         ps_plot.visualize_source(
-            self.s_points_this_iter,
-            self.s_values_this_iter,
+            self.pix_src_obj.relocated_pixelization_grid, 
+            self.pix_src_obj.src_recontruct[:] ,
             ax=this_ax,
         )
+        # ps_plot.visualize_source(
+        #     self.s_points_this_iter, #TODO, should change to the pure src inversion one given the current mass model
+        #     self.s_values_this_iter,
+        #     ax=this_ax,
+        # )
         this_ax.set_title('Source')
-        this_ax.set_xlabel('Arcsec')
-        this_ax.set_ylabel('Arcsec')
 
-        #cumulative potential correction
-        cumulative_psi_correct =  np.asarray(self._dpsi_map_coarse).sum(axis=0)
-        masked_cumulative_psi_correct = np.ma.masked_array(
-            cumulative_psi_correct, 
+        #-------------potential correction of this iteration
+        plt.subplot(336)
+        psi_correct_this_iter =  np.asarray(self._dpsi_map_coarse)[-1]
+        masked_psi_correct_this_iter = np.ma.masked_array(
+            psi_correct_this_iter, 
             mask=self.grid_obj.mask_dpsi
         )
-        plt.subplot(235)
-        vmin = None #np.percentile(cumulative_psi_correct,percent[0]) 
-        vmax = None #np.percentile(cumulative_psi_correct,percent[1]) 
-        plt.imshow(masked_cumulative_psi_correct,vmin=vmin,vmax=vmax,**myargs)
+        plt.imshow(masked_psi_correct_this_iter,**myargs)
         plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
         cb.ax.tick_params(labelsize='small')
         plt.xlim(-1.0*limit, limit)
         plt.ylim(-1.0*limit, limit)
-        plt.title(r'potential corrections')
+        plt.title(r'$\delta \psi$')
+
+        #-------------convergence correction of this iteration
+        plt.subplot(337)
+        kappa_correct_this_iter =  np.zeros_like(psi_correct_this_iter)
+        kappa_correct_this_iter_1d = np.matmul(
+            self.grid_obj.hamiltonian_dpsi,
+            psi_correct_this_iter[~self.grid_obj.mask_dpsi]
+        )
+        kappa_correct_this_iter[~self.grid_obj.mask_dpsi] = kappa_correct_this_iter_1d
+        masked_kappa_correct_this_iter = np.ma.masked_array(
+            kappa_correct_this_iter, 
+            mask=self.grid_obj.mask_dpsi
+        )
+        plt.imshow(masked_kappa_correct_this_iter,**myargs)
+        plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
+        cb=plt.colorbar(**cbpar)
+        cb.ax.minorticks_on()
+        cb.ax.tick_params(labelsize='small')
+        if self._subhalo_fiducial_point is not None:
+            plt.plot(self._subhalo_fiducial_point[1], self._subhalo_fiducial_point[0], 'k*', ms=markersize)
+        plt.xlim(-1.0*limit, limit)
+        plt.ylim(-1.0*limit, limit)
+        plt.title(r'$\delta \kappa$')
+        plt.xlabel('Arcsec')
+        plt.ylabel('Arcsec')
+
+        #-------------cumulative potential correction
+        plt.subplot(338)
+        cumulative_psi_correct =  np.asarray(self._dpsi_map_coarse).sum(axis=0)
+        masked_cumulative_psi_correct = np.ma.masked_array(
+            cumulative_psi_correct, 
+            mask=self.grid_obj.mask_dpsi
+        )
+        plt.imshow(masked_cumulative_psi_correct,**myargs)
+        plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
+        cb=plt.colorbar(**cbpar)
+        cb.ax.minorticks_on()
+        cb.ax.tick_params(labelsize='small')
+        plt.xlim(-1.0*limit, limit)
+        plt.ylim(-1.0*limit, limit)
+        plt.title(r'$\Sigma \left(\delta \psi \right)$')
         plt.xlabel('Arcsec')
 
+        #-------------cumulative convergence correction
+        plt.subplot(339)
         cumulative_kappa_correct = np.zeros_like(cumulative_psi_correct)
         cumulative_kappa_correct_1d = np.matmul(
             self.grid_obj.hamiltonian_dpsi,
@@ -504,20 +659,41 @@ class IterativePotentialCorrect(object):
             cumulative_kappa_correct, 
             mask=self.grid_obj.mask_dpsi
         )
-        plt.subplot(236)
-        vmin = None #np.percentile(self.dkappa_accum,percent[0]) 
-        vmax = None #np.percentile(self.dkappa_accum,percent[1]) 
-        plt.imshow(masked_cumulative_kappa_correct,vmin=vmin,vmax=vmax,**myargs)
+        plt.imshow(masked_cumulative_kappa_correct,**myargs)
         plt.plot(self._psi_anchor_points[:,1], self._psi_anchor_points[:,0], 'k+', ms=markersize)
-        plt.plot(self._subhalo_fiducial_point[1], self._subhalo_fiducial_point[0], 'k*', ms=markersize)
+        if self._subhalo_fiducial_point is not None:
+            plt.plot(self._subhalo_fiducial_point[1], self._subhalo_fiducial_point[0], 'k*', ms=markersize)
         cb=plt.colorbar(**cbpar)
         cb.ax.minorticks_on()
         cb.ax.tick_params(labelsize='small')
         plt.xlim(-1.0*limit, limit)
         plt.ylim(-1.0*limit, limit)
-        plt.title(r'kappa corrections')
+        plt.title(r'$\Sigma \left(\delta \kappa \right)$')
         plt.xlabel('Arcsec')
 
         plt.tight_layout()
         plt.savefig(f'{basedir}/{iter_num}.jpg', bbox_inches='tight')
         plt.close()
+
+        if self.save_fits:
+            self.save_correction_fits(
+                basedir=basedir,
+                iter_num=iter_num,
+                kappa_correct=cumulative_kappa_correct,
+                psi_correct=cumulative_psi_correct,
+            )
+
+
+
+    def save_correction_fits(
+        self, 
+        basedir=None, 
+        iter_num=None,
+        kappa_correct=None,
+        psi_correct=None,
+    ):
+        abs_path = os.path.abspath(basedir)  #get absolute path
+        if not os.path.exists(f"{abs_path}/fits"):  #check if path exist
+            os.makedirs(f"{abs_path}/fits") #create new directory recursively
+        fits.writeto(f'{basedir}/fits/kappa_correction_{iter_num}.fits', kappa_correct, overwrite=True)
+        fits.writeto(f'{basedir}/fits/psi_correction_{iter_num}.fits', psi_correct, overwrite=True)
